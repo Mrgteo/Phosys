@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>转写结果查看 - 音频转写系统</title>
+    <link rel="stylesheet" href="/static/css/result.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <div class="header-left">
+                <button id="back-btn" class="btn-back">
+                    <i class="fas fa-arrow-left"></i> 返回
+                </button>
+                <h1><i class="fas fa-file-alt"></i> 转写结果查看</h1>
+            </div>
+            <div class="header-right">
+                <button id="download-transcript-btn" class="btn btn-primary">
+                    <i class="fas fa-download"></i> 下载转写结果
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <div class="main-content">
+            <!-- 统一大卡片 -->
+            <div class="unified-card">
+                <!-- 文件信息和操作区域 -->
+                <div class="file-info-section">
+                    <div class="info-items">
+                        <div class="info-item">
+                            <i class="fas fa-file-audio"></i>
+                            <span class="label">文件名:</span>
+                            <span id="file-name" class="value">加载中...</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-clock"></i>
+                            <span class="label">上传时间:</span>
+                            <span id="upload-time" class="value">-</span>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button id="copy-transcript-btn" class="btn-icon" title="复制转写结果">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button id="search-btn" class="btn-icon" title="搜索">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 转写内容 -->
+                <div id="transcript-content" class="transcript-content">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>加载转写结果中...</p>
+                    </div>
+                </div>
+
+                <!-- 音频播放器区域 -->
+                <div class="audio-player-section">
+                    <div class="audio-player-wrapper">
+                        <audio id="audio-player" controls>
+                            <source id="audio-source" src="" type="audio/mpeg">
+                            您的浏览器不支持音频播放
+                        </audio>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 搜索框模态窗口 -->
+    <div id="search-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>搜索转写内容</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="search-input" placeholder="输入关键词搜索..." autofocus>
+                <div id="search-results" class="search-results">
+                    <p class="text-muted">输入关键词开始搜索</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/result.js?v=20251031"></script>
+</body>
+</html>
+

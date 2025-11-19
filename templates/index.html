@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音频转写系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-microphone"></i> 音频转写系统</h1>
+            <p>基于AI的实时语音识别与声纹分离</p>
+        </header>
+
+        <div class="main-content">
+            <!-- 文件上传区域 -->
+            <div class="upload-section">
+                <div class="upload-card">
+                    <h3><i class="fas fa-cloud-upload-alt"></i> 查看功能说明</h3>
+                    <div class="upload-notice">
+                        <p class="notice-text"><i class="fas fa-info-circle"></i> 上传待识别的音频文件后检测，将会智能识别为文字。区分多人语音，并合成文件。</p>
+                    </div>
+                    
+                    <!-- 上传区域 -->
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-content">
+                            <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                            <p class="upload-text">拖入文件或点击选择文件</p>
+                            <p class="upload-hint">支持 mp3、wav、m4a、wma、aac、ogg、amr、flac、aiff等格式，单个不超过100M</p>
+                            <input type="file" id="audio-file-input" accept="audio/*" multiple style="display: none;">
+                            <button class="btn btn-primary upload-btn" onclick="document.getElementById('audio-file-input').click()">
+                                <i class="fas fa-folder-open"></i> 上传文件
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 文件列表表格 -->
+                    <div class="file-list-container">
+                        <table class="file-list-table">
+                            <thead>
+                                <tr>
+                                    <th>文件标题</th>
+                                    <th width="120">上传时间</th>
+                                    <th width="80">状态</th>
+                                    <th width="80">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="file-list-tbody">
+                                <!-- 动态添加文件列表 -->
+                            </tbody>
+                        </table>
+                        <div id="file-list-empty" class="file-list-empty">
+                            <i class="fas fa-folder-open"></i>
+                            <p>暂无上传文件</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 查看历史记录链接 -->
+                    <div class="history-link-container">
+                        <a href="javascript:void(0)" class="history-link" onclick="app.openHistoryModal()">
+                            查看历史记录
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 错误提示模态框 -->
+    <div id="error-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> 错误提示</h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="error-message"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录模态框 -->
+    <div id="history-modal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3><i class="fas fa-history"></i> 历史记录</h3>
+                <button class="close-btn" onclick="app.closeHistoryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="history-actions-bar">
+                    <button class="btn-clear-dify" id="btn-clear-dify">
+                        <i class="fas fa-trash-alt"></i> 清空dify生成文件
+                    </button>
+                    <button class="btn-clear-all" id="btn-clear-all">
+                        <i class="fas fa-broom"></i> 清空所有历史记录
+                    </button>
+                </div>
+                <div class="history-table-container">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th width="60">序号</th>
+                                <th>文件标题</th>
+                                <th width="150">转写时间</th>
+                                <th width="100">状态</th>
+                                <th width="120">转写详情</th>
+                                <th width="120">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-tbody">
+                            <!-- 动态添加历史记录 -->
+                        </tbody>
+                    </table>
+                    <div id="history-empty" class="history-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>暂无历史记录</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载提示 -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>正在处理中，请稍候...</p>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=20251031ws2"></script>
+</body>
+</html>
+

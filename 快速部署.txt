@@ -1,0 +1,11 @@
+conda create -n phosys python=3.11
+
+conda activate phosys
+
+pip install modelscope[framework]
+
+pip install torch torchvision torchaudio -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+pip install "modelscope[audio]" -f https://modelscope.oss-cn-beijing.aliyuncs.com/releases/repo.html
+
+pip install "fastapi[all]" slowapi pydub python-docx openai

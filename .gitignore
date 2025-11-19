@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# 运行时生成的数据
+uploads/*
+!uploads/.gitkeep
+transcripts/*
+!transcripts/.gitkeep
+audio_temp/*
+!audio_temp/.gitkeep
+
+# 日志文件
+*.log
+app.log
+
+# 临时文件
+*.tmp
+*.bak
+*~
+temp_*
+dify_temp_*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 环境变量
+.env
+.env.local

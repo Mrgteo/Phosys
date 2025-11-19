@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+1、每次使用终端先输入conda activate campp 再执行
+2、每次修改完代码不需要写修改的说明文档
+3、不要自动生成markdown文档
+---
