@@ -1,7 +1,7 @@
 # 音频转写系统 API 接口文档
 
-> 版本: 3.1.1-FunASR  
-> 更新时间: 2025-11-13  
+> 版本: 3.1.2-FunASR  
+> 更新时间: 2025-11-25  
 > 基础URL: `http://localhost:8998`
 
 ---
@@ -38,6 +38,9 @@
 - 🤖 **AI会议纪要**：集成DeepSeek/OpenAI生成结构化纪要
 - ⚡ **批量处理**：支持多文件并发转写
 - 🔄 **实时推送**：WebSocket实时推送处理进度
+- 🎯 **词级别时间戳**：支持返回逐词时间戳，实现精确的音字同步
+- ✨ **音字同步高亮**：播放音频时自动高亮对应的转写文字
+- 📈 **平滑进度显示**：智能进度追踪器平滑推进，避免进度条跳跃
 
 ### 支持的音频格式
 
@@ -171,13 +174,117 @@
           "speaker": "说话人1",
           "text": "大家好，今天我们讨论项目进展。",
           "start_time": 0.5,
-          "end_time": 3.2
+          "end_time": 3.2,
+          "words": [
+            {
+              "text": "大家",
+              "start": 0.5,
+              "end": 0.8
+            },
+            {
+              "text": "好",
+              "start": 0.8,
+              "end": 1.0
+            },
+            {
+              "text": "，",
+              "start": 1.0,
+              "end": 1.1
+            },
+            {
+              "text": "今天",
+              "start": 1.1,
+              "end": 1.4
+            },
+            {
+              "text": "我们",
+              "start": 1.4,
+              "end": 1.7
+            },
+            {
+              "text": "讨论",
+              "start": 1.7,
+              "end": 2.0
+            },
+            {
+              "text": "项目",
+              "start": 2.0,
+              "end": 2.3
+            },
+            {
+              "text": "进展",
+              "start": 2.3,
+              "end": 2.6
+            },
+            {
+              "text": "。",
+              "start": 2.6,
+              "end": 2.7
+            }
+          ]
         },
         {
           "speaker": "说话人2",
           "text": "好的，我先汇报一下我负责的部分。",
           "start_time": 3.5,
-          "end_time": 6.8
+          "end_time": 6.8,
+          "words": [
+            {
+              "text": "好的",
+              "start": 3.5,
+              "end": 3.8
+            },
+            {
+              "text": "，",
+              "start": 3.8,
+              "end": 3.9
+            },
+            {
+              "text": "我",
+              "start": 3.9,
+              "end": 4.0
+            },
+            {
+              "text": "先",
+              "start": 4.0,
+              "end": 4.2
+            },
+            {
+              "text": "汇报",
+              "start": 4.2,
+              "end": 4.6
+            },
+            {
+              "text": "一下",
+              "start": 4.6,
+              "end": 4.9
+            },
+            {
+              "text": "我",
+              "start": 4.9,
+              "end": 5.0
+            },
+            {
+              "text": "负责",
+              "start": 5.0,
+              "end": 5.3
+            },
+            {
+              "text": "的",
+              "start": 5.3,
+              "end": 5.4
+            },
+            {
+              "text": "部分",
+              "start": 5.4,
+              "end": 5.7
+            },
+            {
+              "text": "。",
+              "start": 5.7,
+              "end": 5.8
+            }
+          ]
         }
       ],
       "download_urls": {
@@ -509,7 +616,19 @@ async function loadFilesPage(page = 1, pageSize = 20) {
       "speaker": "说话人1",
       "text": "会议内容...",
       "start_time": 0.5,
-      "end_time": 3.2
+      "end_time": 3.2,
+      "words": [
+        {
+          "text": "会议",
+          "start": 0.5,
+          "end": 0.8
+        },
+        {
+          "text": "内容",
+          "start": 0.8,
+          "end": 1.1
+        }
+      ]
     }
   ],
   "statistics": {
@@ -813,7 +932,19 @@ curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
       "speaker": "说话人1",
       "text": "会议内容...",
       "start_time": 0.5,
-      "end_time": 3.2
+      "end_time": 3.2,
+      "words": [
+        {
+          "text": "会议",
+          "start": 0.5,
+          "end": 0.8
+        },
+        {
+          "text": "内容",
+          "start": 0.8,
+          "end": 1.1
+        }
+      ]
     }
   ],
   "summary": {
@@ -1047,6 +1178,31 @@ curl "http://localhost:8998/api/voice/download_file/transcripts_20251102_143500.
 }
 ```
 
+**进度条细化优化** ⭐ 新功能：
+
+系统实现了智能进度追踪机制，避免进度条跳跃显示，提升用户体验：
+
+1. **智能进度追踪器（后端 `SmartProgressTracker`）**：
+   - 后台线程平滑推进进度，每1%逐步更新
+   - 根据预估时间计算更新间隔（0.05s - 0.5s），确保平滑显示
+   - 任务完成时极速补齐进度（2ms间隔），保证视觉连续性
+   - 主线程无需sleep等待，不影响业务处理速度
+
+2. **WebSocket去重机制（后端 `ConnectionManager`）**：
+   - 只有当进度值增加、状态变化或完成时才发送消息
+   - 避免发送重复的进度值，减少网络开销
+   - 防止长音频处理时进度条反复跳跃
+
+3. **前端防回退保护（前端 `app.js`）**：
+   - 使用 `Math.max()` 确保进度只增不减
+   - 忽略网络延迟导致的进度回退消息
+   - 只有真正有变化时才更新UI，避免重复刷新
+
+**效果**：
+- ✅ 进度条平滑推进，不再出现突然跳跃
+- ✅ 减少网络消息数量，降低服务器负载
+- ✅ 提升用户体验，进度显示更加流畅自然
+
 **JavaScript示例**：
 
 ```javascript
@@ -1058,15 +1214,29 @@ ws.onopen = function() {
     console.log('WebSocket已连接');
 };
 
-// 接收消息
+// 接收消息（含进度条细化优化）
 ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
     console.log('收到消息:', data);
     
     if (data.type === 'file_status') {
         console.log(`文件 ${data.file_id}: ${data.status} (${data.progress}%)`);
-        // 更新UI进度条
-        updateProgress(data.file_id, data.progress, data.message);
+        
+        // ✅ 进度条细化优化：只更新进度增加的情况
+        const file = getFileById(data.file_id);
+        if (file) {
+            const progressIncreased = data.progress > file.progress;
+            const statusChanged = data.status !== file.status;
+            
+            // 只有当进度增加、状态变化或完成时才更新
+            if (progressIncreased || statusChanged || data.status === 'completed') {
+                // 确保进度只增不减（防止回退）
+                file.progress = Math.max(file.progress, data.progress);
+                file.status = data.status;
+                // 更新UI进度条
+                updateProgress(data.file_id, file.progress, data.message);
+            }
+        }
     }
 };
 
@@ -1211,7 +1381,7 @@ asyncio.run(connect_websocket())
 ```json
 {
   "status": "ok",
-  "version": "3.1.0-FunASR"
+  "version": "3.1.2-FunASR"
 }
 ```
 
@@ -1229,7 +1399,7 @@ asyncio.run(connect_websocket())
 {
   "success": true,
   "system": "running",
-  "version": "3.1.0-FunASR",
+  "version": "3.1.2-FunASR",
   "models_loaded": true
 }
 ```
@@ -1277,8 +1447,23 @@ interface Transcript {
   text: string;         // 转写文本
   start_time: number;   // 开始时间（秒）
   end_time: number;     // 结束时间（秒）
+  words?: WordTimestamp[]; // 词级别时间戳（可选，用于音字同步）
+}
+
+interface WordTimestamp {
+  text: string;         // 词或短语的文本
+  start: number;        // 开始时间（秒）
+  end: number;          // 结束时间（秒）
 }
 ```
+
+**说明**：
+- `words` 字段为可选字段，包含该转写段中每个词或短语的精确时间戳
+- 时间戳单位：秒（浮点数，精确到小数点后2-3位）
+- 词级别时间戳的生成方式：
+  - **优先方案**：如果 FunASR 模型支持，直接使用模型输出的词级别时间戳
+  - **降级方案**：使用 Jieba 分词 + 线性插值生成时间戳（根据字符数比例分配时间）
+- 前端可以使用 `words` 字段实现音字同步高亮显示功能
 
 ### Summary（会议纪要）
 
@@ -1693,6 +1878,39 @@ function connectWebSocket() {
 ---
 
 ## 更新日志
+
+### v3.1.2-FunASR (2025-11-25)
+
+**功能增强**
+
+#### 新增功能
+- ✅ **词级别时间戳**：后端自动生成每个词或短语的精确时间戳
+  - 优先使用 FunASR 原生词级别时间戳（如果模型支持）
+  - 降级方案：使用 Jieba 分词 + 线性插值生成时间戳
+  - 确保所有转写结果都包含词级别时间信息
+- ✅ **音字同步高亮显示**：前端实现音频播放与转写文字的实时同步
+  - 播放音频时自动高亮当前播放位置对应的转写文字
+  - 支持点击转写文字跳转到对应音频位置
+  - 自动滚动到高亮词，提升阅读体验
+  - 支持词级别和句子级别两种模式，向后兼容
+- ✅ **进度条细化优化**：避免进度条跳跃显示，提升用户体验
+  - 智能进度追踪器：后台线程平滑推进进度，每1%逐步更新
+  - WebSocket去重机制：避免发送重复的进度值，减少网络开销
+  - 前端防回退保护：确保进度只增不减，忽略网络延迟导致的进度回退
+  - 快速追赶机制：任务完成时极速补齐进度，保证视觉连续性
+
+#### 技术改进
+- ✅ 优化了词级别时间戳的生成逻辑，确保文本完整性
+- ✅ 改进了前端高亮匹配算法，使用左闭右开区间避免相邻词同时高亮
+- ✅ 优化了 DOM 元素缓存机制，提升性能
+- ✅ 添加了时间戳验证和错误处理，提高健壮性
+- ✅ 实现了智能进度追踪器，后台线程平滑推进进度，避免进度条跳跃
+- ✅ 优化了 WebSocket 消息发送逻辑，减少重复消息和网络开销
+
+#### API变更
+- ✅ `transcript` 数组中的每个条目现在包含可选的 `words` 字段，用于词级别时间戳
+- ✅ `words` 字段结构：`[{text: string, start: number, end: number}, ...]`
+- ✅ 所有返回转写结果的接口都已支持 `words` 字段
 
 ### v3.1.1-FunASR (2025-11-13)
 

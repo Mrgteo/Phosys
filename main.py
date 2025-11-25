@@ -14,7 +14,6 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -75,15 +74,6 @@ app = FastAPI(
     title="音频转写系统",
     description="基于AI的实时语音识别与声纹分离系统 (Domain-Application-Infra架构)",
     version="3.1.0-FunASR"
-)
-
-# 启用CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # 速率限制

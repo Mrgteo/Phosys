@@ -3,6 +3,8 @@ class ResultViewer {
         this.fileId = null;
         this.fileData = null;
         this.transcriptData = null;
+        this.wordElements = null;  // 缓存词元素
+        this.lastHighlightedWord = null;  // 上次高亮的词
         this.init();
     }
 
@@ -76,7 +78,10 @@ class ResultViewer {
                 
                 this.renderFileInfo();
                 this.renderTranscript();
-                this.loadAudio();
+                // 延迟加载音频，确保词元素已缓存
+                setTimeout(() => {
+                    this.loadAudio();
+                }, 100);
             } else {
                 alert(result.message || '加载文件数据失败');
                 this.goBack();
@@ -109,20 +114,97 @@ class ResultViewer {
             return;
         }
         
-        const html = this.transcriptData.map((entry, index) => `
-            <div class="transcript-entry" data-index="${index}" data-start-time="${entry.start_time || 0}">
-                <div class="speaker-info">
-                    <span class="speaker-label">${this.escapeHtml(entry.speaker || '发言人')}</span>
-                    <span class="timestamp">${this.formatTime(entry.start_time)} - ${this.formatTime(entry.end_time)}</span>
-                </div>
-                <div class="transcript-text">${this.escapeHtml(entry.text || '')}</div>
-            </div>
-        `).join('');
+        const html = this.transcriptData.map((entry, index) => {
+            // 如果有词级别时间戳，使用词级别渲染
+            if (entry.words && entry.words.length > 0) {
+                // 验证：检查所有词的文本是否完整
+                const reconstructedText = entry.words.map(w => w.text).join('');
+                if (entry.text && reconstructedText !== entry.text) {
+                    console.warn(`句子 ${index} 分词后文本不匹配:`, {
+                        original: entry.text,
+                        reconstructed: reconstructedText,
+                        originalLength: entry.text.length,
+                        reconstructedLength: reconstructedText.length
+                    });
+                }
+                
+                const wordsHtml = entry.words.map((word, wordIndex) => {
+                    // 验证时间戳有效性
+                    const start = parseFloat(word.start);
+                    const end = parseFloat(word.end);
+                    if (isNaN(start) || isNaN(end) || start < 0 || end < 0) {
+                        console.warn(`词时间戳无效: ${word.text}, start: ${word.start}, end: ${word.end}`);
+                    }
+                    
+                    return `<span class="word-item" 
+                           data-start="${start}" 
+                           data-end="${end}"
+                           data-sentence-index="${index}"
+                           data-word-index="${wordIndex}">${this.escapeHtml(word.text)}</span>`;
+                }).join('');
+                
+                return `
+                    <div class="transcript-entry" data-index="${index}" data-start-time="${entry.start_time || 0}">
+                        <div class="speaker-info">
+                            <span class="speaker-label">${this.escapeHtml(entry.speaker || '发言人')}</span>
+                            <span class="timestamp">${this.formatTime(entry.start_time)} - ${this.formatTime(entry.end_time)}</span>
+                        </div>
+                        <div class="transcript-text">${wordsHtml}</div>
+                    </div>
+                `;
+            } else {
+                // 降级到句子级别渲染（兼容旧数据）
+                return `
+                    <div class="transcript-entry" data-index="${index}" data-start-time="${entry.start_time || 0}">
+                        <div class="speaker-info">
+                            <span class="speaker-label">${this.escapeHtml(entry.speaker || '发言人')}</span>
+                            <span class="timestamp">${this.formatTime(entry.start_time)} - ${this.formatTime(entry.end_time)}</span>
+                        </div>
+                        <div class="transcript-text">${this.escapeHtml(entry.text || '')}</div>
+                    </div>
+                `;
+            }
+        }).join('');
         
         transcriptContent.innerHTML = html;
         
-        // 为每个转写条目添加点击事件
+        // 为每个转写条目添加点击事件（句子级别）
         this.bindTranscriptClickEvents();
+        
+        // 延迟缓存词元素，确保DOM完全更新
+        setTimeout(() => {
+            // 缓存词元素（用于音字同步）
+            this.wordElements = document.querySelectorAll('.word-item');
+            console.log(`✅ 已缓存 ${this.wordElements.length} 个词元素用于音字同步`);
+            
+            // 验证词元素的时间戳
+            if (this.wordElements && this.wordElements.length > 0) {
+                let validCount = 0;
+                this.wordElements.forEach((wordEl, index) => {
+                    const start = parseFloat(wordEl.dataset.start);
+                    const end = parseFloat(wordEl.dataset.end);
+                    if (!isNaN(start) && !isNaN(end) && start >= 0 && end >= 0) {
+                        validCount++;
+                    }
+                    
+                    // 为词元素添加点击事件
+                    wordEl.style.cursor = 'pointer';
+                    wordEl.addEventListener('click', (e) => {
+                        e.stopPropagation();  // 阻止事件冒泡到句子
+                        const startTime = parseFloat(wordEl.dataset.start);
+                        if (!isNaN(startTime)) {
+                            this.seekToTime(startTime);
+                        }
+                    });
+                    if (!isNaN(start)) {
+                        wordEl.title = `点击跳转到 ${this.formatTime(start)}`;
+                    }
+                });
+                console.log(`✅ 有效时间戳的词元素: ${validCount}/${this.wordElements.length}`);
+            } else {
+                console.warn('⚠️ 未找到词元素，音字同步功能可能无法正常工作');
+            }
+        }, 0);
     }
     
     bindTranscriptClickEvents() {
@@ -131,7 +213,9 @@ class ResultViewer {
             entry.style.cursor = 'pointer';
             entry.addEventListener('click', () => {
                 const startTime = parseFloat(entry.dataset.startTime);
-                this.seekToTime(startTime);
+                if (!isNaN(startTime)) {
+                    this.seekToTime(startTime);
+                }
             });
             
             // 添加悬停效果提示
@@ -145,6 +229,9 @@ class ResultViewer {
         
         // 设置音频播放位置
         audioPlayer.currentTime = time;
+        
+        // 立即更新高亮（因为timeupdate事件可能有延迟）
+        this.highlightCurrentWord(time);
         
         // 如果音频未播放，则开始播放
         if (audioPlayer.paused) {
@@ -181,10 +268,91 @@ class ResultViewer {
 
     updateCurrentTime() {
         const audioPlayer = document.getElementById('audio-player');
-        const currentTime = document.getElementById('current-time');
         
-        if (audioPlayer && currentTime) {
-            currentTime.textContent = this.formatTime(audioPlayer.currentTime);
+        if (!audioPlayer) {
+            return;
+        }
+        
+        const currentTimeValue = audioPlayer.currentTime;
+        
+        // 音字同步：高亮当前播放的词（不依赖current-time元素）
+        this.highlightCurrentWord(currentTimeValue);
+    }
+    
+    highlightCurrentWord(currentTime) {
+        // 如果没有词元素，尝试重新获取
+        if (!this.wordElements || this.wordElements.length === 0) {
+            this.wordElements = document.querySelectorAll('.word-item');
+            if (!this.wordElements || this.wordElements.length === 0) {
+                return;
+            }
+        }
+        
+        // 验证当前时间有效性
+        if (isNaN(currentTime) || currentTime < 0) {
+            return;
+        }
+        
+        // 查找当前时间对应的词
+        let foundWord = null;
+        let lastWordEl = null;  // 记录最后一个词元素
+        
+        for (let wordEl of this.wordElements) {
+            const start = parseFloat(wordEl.dataset.start);
+            const end = parseFloat(wordEl.dataset.end);
+            
+            // 验证时间戳有效性
+            if (isNaN(start) || isNaN(end) || start < 0 || end < 0) {
+                continue;
+            }
+            
+            // 记录最后一个有效的词元素
+            lastWordEl = wordEl;
+            
+            // 区间判断：当前时间是否在 [start, end) 范围内
+            // 使用左闭右开区间 [start, end)，避免相邻词同时高亮
+            if (currentTime >= start && currentTime < end) {
+                foundWord = wordEl;
+                break;
+            }
+        }
+        
+        // 如果没找到匹配的词，但当前时间在最后一个词的范围内，高亮最后一个词
+        // 这确保音频播放到最后时也能高亮
+        if (!foundWord && lastWordEl) {
+            const lastStart = parseFloat(lastWordEl.dataset.start);
+            const lastEnd = parseFloat(lastWordEl.dataset.end);
+            if (!isNaN(lastStart) && !isNaN(lastEnd) && currentTime >= lastStart && currentTime <= lastEnd) {
+                foundWord = lastWordEl;
+            }
+        }
+        
+        // 如果找到匹配的词且与上次不同，更新高亮
+        if (foundWord && foundWord !== this.lastHighlightedWord) {
+            // 移除所有旧的高亮（防止多个词同时高亮）
+            if (this.lastHighlightedWord) {
+                this.lastHighlightedWord.classList.remove('active');
+            }
+            
+            // 添加新高亮
+            foundWord.classList.add('active');
+            this.lastHighlightedWord = foundWord;
+            
+            // 滚动到可见区域（使用平滑滚动，但降低频率避免过于频繁）
+            // 只在必要时滚动（词不在可见区域时）
+            const rect = foundWord.getBoundingClientRect();
+            const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+            if (!isVisible) {
+                foundWord.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest'
+                });
+            }
+        } else if (!foundWord && this.lastHighlightedWord) {
+            // 如果没有找到匹配的词（例如音频暂停或跳转），移除高亮
+            this.lastHighlightedWord.classList.remove('active');
+            this.lastHighlightedWord = null;
         }
     }
 

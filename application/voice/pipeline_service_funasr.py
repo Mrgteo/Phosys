@@ -202,7 +202,20 @@ class PipelineService:
             self.tracker.start_phase("文本处理", "正在优化文本内容...", 90, 95, estimated_time=0.5)
             for entry in merged_transcript:
                 if 'text' in entry:
-                    entry['text'] = self.text_processor.fix_transcript_text(entry['text'])
+                    original_text = entry['text']
+                    fixed_text = self.text_processor.fix_transcript_text(original_text)
+                    
+                    # 如果文本被修改（例如去掉了末尾逗号），需要同步更新words数组
+                    if fixed_text != original_text and 'words' in entry and entry['words']:
+                        # 重新生成words数组，确保与修复后的文本一致
+                        entry['words'] = self.asr_runner._extract_word_timestamps(
+                            None, 
+                            entry.get('start_time', 0), 
+                            entry.get('end_time', 0), 
+                            fixed_text
+                        )
+                    
+                    entry['text'] = fixed_text
             self.tracker.complete_phase() # 瞬间补齐到 95%
 
             # =================================================

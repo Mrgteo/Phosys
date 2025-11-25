@@ -211,22 +211,33 @@ class ASRRunner:
                     # 使用映射后的连续编号
                     speaker_number = speaker_id_map[original_spk]
                     
+                    text = sentence.get('text', '')
+                    start_time = sentence.get('start', 0) / 1000.0  # 转为秒
+                    end_time = sentence.get('end', 0) / 1000.0
+                    
+                    # 提取词级别时间戳
+                    words = self._extract_word_timestamps(sentence, start_time, end_time, text)
+                    
                     transcript_list.append({
-                        'text': sentence.get('text', ''),
-                        'start_time': sentence.get('start', 0) / 1000.0,  # 转为秒
-                        'end_time': sentence.get('end', 0) / 1000.0,
-                        'speaker': f"发言人{speaker_number}"  # 使用连续编号
+                        'text': text,
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'speaker': f"发言人{speaker_number}",  # 使用连续编号
+                        'words': words  # 词级别时间戳
                     })
                 
                 logger.info(f"✅ 识别完成: 共{sentence_count}个句子, {len(speaker_id_map)}位说话人")
             elif 'text' in result:
                 # 只有文本，没有说话人信息
                 logger.warning("⚠️ 结果中无说话人信息，作为单人处理")
+                text = result['text']
+                words = self._extract_word_timestamps(None, 0, 0, text)
                 transcript_list.append({
-                    'text': result['text'],
+                    'text': text,
                     'start_time': 0,
                     'end_time': 0,
-                    'speaker': '发言人1'  # 单人时默认为发言人1
+                    'speaker': '发言人1',  # 单人时默认为发言人1
+                    'words': words
                 })
             
             return transcript_list
@@ -234,6 +245,106 @@ class ASRRunner:
         except Exception as e:
             logger.error(f"❌ FunASR转写失败: {e}")
             raise
+    
+    def _extract_word_timestamps(self, sentence: Dict, start_time: float, end_time: float, text: str) -> List[Dict]:
+        """
+        提取词级别时间戳
+        
+        Args:
+            sentence: FunASR句子信息（可能包含词级别时间戳）
+            start_time: 句子开始时间（秒）
+            end_time: 句子结束时间（秒）
+            text: 句子文本
+            
+        Returns:
+            List[Dict]: 词级别时间戳列表，每项包含 {'text': str, 'start': float, 'end': float}
+        """
+        words = []
+        
+        # 方法1: 尝试从FunASR结果中提取词级别时间戳
+        if sentence and 'words' in sentence:
+            # FunASR可能提供词级别时间戳
+            for word_info in sentence['words']:
+                word_text = word_info.get('text', '')
+                word_start = word_info.get('start', 0) / 1000.0  # 转为秒
+                word_end = word_info.get('end', 0) / 1000.0
+                if word_text:
+                    words.append({
+                        'text': word_text,
+                        'start': word_start,
+                        'end': word_end
+                    })
+            if words:
+                logger.debug(f"✅ 从FunASR结果中提取到 {len(words)} 个词级别时间戳")
+                return words
+        
+        # 方法2: 如果没有词级别时间戳，使用分词+线性插值
+        if not text or not text.strip():
+            return words
+        
+        try:
+            import jieba
+            import re
+            
+            # 使用jieba进行中文分词，保留所有字符（包括标点和空格）
+            # 先分词，然后按原始文本顺序重建
+            word_segments = list(jieba.cut(text, cut_all=False))
+            
+            # 移除空字符串，但保留其他字符（包括标点）
+            word_list = [w for w in word_segments if w]
+            
+            if not word_list:
+                return words
+            
+            # 计算每个词的时间戳（线性插值）
+            duration = end_time - start_time
+            if duration <= 0:
+                # 如果时间戳无效，给每个词分配相同的时间
+                duration = len(word_list) * 0.3  # 假设每个词0.3秒
+                end_time = start_time + duration
+            
+            # 计算总字符数（用于按比例分配时间）
+            total_chars = sum(len(w) for w in word_list)
+            if total_chars == 0:
+                return words
+            
+            current_time = start_time
+            for word in word_list:
+                # 根据字符数比例分配时间
+                word_duration = (len(word) / total_chars) * duration
+                word_start = current_time
+                word_end = current_time + word_duration
+                
+                words.append({
+                    'text': word,
+                    'start': word_start,
+                    'end': word_end
+                })
+                
+                current_time = word_end
+            
+            # 确保最后一个词的结束时间等于句子结束时间
+            if words:
+                words[-1]['end'] = end_time
+            
+            # 验证：确保所有词的文本加起来等于原文本（去除空格比较）
+            reconstructed_text = ''.join([w['text'] for w in words])
+            if reconstructed_text.replace(' ', '') != text.replace(' ', ''):
+                logger.warning(f"⚠️ 分词后文本不匹配，原文本长度: {len(text)}, 重建长度: {len(reconstructed_text)}")
+            
+            logger.debug(f"✅ 使用分词+插值生成 {len(words)} 个词级别时间戳")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 词级别时间戳提取失败: {e}，将使用句子级别时间戳")
+            # 如果分词失败，至少返回一个包含整个句子的词
+            if text.strip():
+                words.append({
+                    'text': text.strip(),
+                    'start': start_time,
+                    'end': end_time
+                })
+        
+        return words
     
     def get_pool_stats(self) -> Optional[dict]:
         """获取模型池统计信息"""

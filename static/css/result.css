@@ -249,6 +249,9 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
+    overflow: visible;
+    min-height: auto;
+    height: auto;
 }
 
 .transcript-entry:hover {
@@ -305,6 +308,53 @@ body {
     color: #2d3748;
     line-height: 1.8;
     font-size: 1rem;
+    word-wrap: break-word;
+    word-break: break-all;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+/* 词级别时间戳样式 */
+.word-item {
+    display: inline;
+    transition: all 0.2s ease;
+    padding: 2px 0;
+    margin: 0;
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    white-space: normal;
+    letter-spacing: 0;
+    word-spacing: 0;
+}
+
+.word-item:hover {
+    background-color: rgba(102, 126, 234, 0.1);
+}
+
+/* 当前播放的词高亮样式 */
+.word-item.active {
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    color: #000;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(255, 215, 0, 0.4);
+    padding: 2px 4px;
+    border-radius: 4px;
+    animation: wordHighlight 0.3s ease;
+}
+
+@keyframes wordHighlight {
+    0% {
+        background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+        transform: scale(1);
+    }
 }
 
 .loading-state, .empty-state {

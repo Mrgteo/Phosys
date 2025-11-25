@@ -80,6 +80,20 @@ class DiarizationProcessor:
                 # 合并文本并更新结束时间
                 current_segment['text'] += next_segment['text']
                 current_segment['end_time'] = next_segment['end_time']
+                
+                # 合并词级别时间戳数组
+                # 注意：words数组中的时间戳是绝对时间（相对于音频开始），不是相对于segment的start_time
+                # 所以可以直接合并，无需调整时间戳
+                current_words = current_segment.get('words', [])
+                next_words = next_segment.get('words', [])
+                
+                if current_words and next_words:
+                    # 两个都有words，直接合并
+                    current_segment['words'] = current_words + next_words
+                elif next_words:
+                    # 只有next_segment有words，使用它的words
+                    current_segment['words'] = next_words
+                # 如果只有current_words或两者都没有，保持current_segment不变
             else:
                 # 发言人变了,保存当前片段
                 merged_transcript.append(current_segment)

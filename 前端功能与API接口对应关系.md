@@ -1,7 +1,7 @@
 # 前端功能与API接口对应关系详细文档
 
-> 版本: 3.1.1-FunASR  
-> 更新时间: 2025-11-13  
+> 版本: 3.1.2-FunASR  
+> 更新时间: 2025-11-25  
 > 说明: 本文档详细描述前端每个功能对应的API接口调用关系
 
 ---
@@ -32,7 +32,7 @@
 - **路径**: `/result.html?file_id={file_id}`
 - **JavaScript**: `/static/js/result.js`
 - **核心类**: `ResultViewer`
-- **主要功能**: 查看转写结果、下载文档、音频播放
+- **主要功能**: 查看转写结果、下载文档、音频播放、音字同步高亮显示
 
 ---
 
@@ -373,10 +373,10 @@ connectWebSocket() {
 }
 ```
 
-#### 4.2 消息处理流程
+#### 4.2 消息处理流程（含进度条细化优化）⭐ 新功能
 
 ```javascript
-// app.js 第151-191行
+// app.js 第167-238行
 handleWebSocketMessage(data) {
     const { type, file_id, status, progress, message } = data;
     
@@ -389,18 +389,46 @@ handleWebSocketMessage(data) {
             // 更新文件状态
             const file = this.uploadedFiles.find(f => f.id === file_id);
             if (file) {
-                file.status = status;
-                file.progress = progress;
-                this.renderFileList(); // 立即更新UI
+                // ✅ 进度条细化优化：只更新进度增加的情况，防止进度回退
+                // 对于相同进度值，只有在状态变化时才更新（避免反复刷新）
+                const progressIncreased = progress > file.progress;
+                const statusChanged = status !== file.status;
+                const isCompleted = status === 'completed';
                 
-                if (status === 'completed') {
-                    setTimeout(() => this.loadUploadedFiles(), 500);
+                // 只有当进度增加、状态变化或完成时才更新
+                if (progressIncreased || (statusChanged && progress >= file.progress) || isCompleted) {
+                    // 确保进度只增不减（防止回退）
+                    const newProgress = Math.max(file.progress, progress);
+                    
+                    // 只有真正有变化时才更新UI
+                    if (newProgress !== file.progress || statusChanged) {
+                        file.status = status;
+                        file.progress = newProgress;
+                        // 立即更新UI
+                        this.renderFileList();
+                    }
+                    
+                    // 如果转写完成，延迟刷新列表（移除已完成文件）
+                    if (status === 'completed') {
+                        console.log('✅ 转写完成，延迟刷新列表');
+                        setTimeout(() => {
+                            this.loadUploadedFiles();
+                        }, 1000);
+                    }
+                } else {
+                    // 如果新进度小于当前进度，忽略（可能是旧消息或网络延迟）
+                    console.log(`⚠️ 忽略进度回退或重复消息: ${file_id} 从 ${file.progress}% 到 ${progress}%`);
                 }
             }
             break;
     }
 }
 ```
+
+**进度条细化优化说明**：
+- ✅ **防回退保护**：使用 `Math.max()` 确保进度只增不减，忽略网络延迟导致的进度回退
+- ✅ **去重机制**：只有当进度真正增加、状态变化或完成时才更新UI，避免重复刷新
+- ✅ **平滑显示**：配合后端的智能进度追踪器，实现平滑的进度条更新体验
 
 #### 4.3 WebSocket消息格式
 
@@ -432,6 +460,31 @@ handleWebSocketMessage(data) {
 | `processing` | 转写中 | 1-99 |
 | `completed` | 已完成 | 100 |
 | `error` | 出错 | 0 |
+
+**进度更新机制** ⭐ 新功能：
+
+系统实现了三层进度条细化优化机制：
+
+1. **后端智能进度追踪器** (`SmartProgressTracker`)：
+   - 后台线程平滑推进进度，每1%逐步更新
+   - 根据预估时间计算更新间隔（0.05s - 0.5s）
+   - 任务完成时极速补齐进度（2ms间隔），保证视觉连续性
+   - 主线程无需sleep等待，不影响业务处理速度
+
+2. **WebSocket去重机制** (`ConnectionManager.send_file_status`)：
+   - 只有当进度值增加、状态变化或完成时才发送消息
+   - 避免发送重复的进度值，减少网络开销
+   - 防止长音频处理时进度条反复跳跃
+
+3. **前端防回退保护** (`app.js.handleWebSocketMessage`)：
+   - 使用 `Math.max()` 确保进度只增不减
+   - 忽略网络延迟导致的进度回退消息
+   - 只有真正有变化时才更新UI，避免重复刷新
+
+**效果**：
+- ✅ 进度条平滑推进，不再出现突然跳跃
+- ✅ 减少网络消息数量，降低服务器负载
+- ✅ 提升用户体验，进度显示更加流畅自然
 
 **3. 订阅确认消息**
 ```json
@@ -996,13 +1049,117 @@ async loadFileData() {
       "speaker": "说话人1",
       "text": "大家好，今天我们讨论项目进展。",
       "start_time": 0.5,
-      "end_time": 3.2
+      "end_time": 3.2,
+      "words": [
+        {
+          "text": "大家",
+          "start": 0.5,
+          "end": 0.8
+        },
+        {
+          "text": "好",
+          "start": 0.8,
+          "end": 1.0
+        },
+        {
+          "text": "，",
+          "start": 1.0,
+          "end": 1.1
+        },
+        {
+          "text": "今天",
+          "start": 1.1,
+          "end": 1.4
+        },
+        {
+          "text": "我们",
+          "start": 1.4,
+          "end": 1.7
+        },
+        {
+          "text": "讨论",
+          "start": 1.7,
+          "end": 2.0
+        },
+        {
+          "text": "项目",
+          "start": 2.0,
+          "end": 2.3
+        },
+        {
+          "text": "进展",
+          "start": 2.3,
+          "end": 2.6
+        },
+        {
+          "text": "。",
+          "start": 2.6,
+          "end": 2.7
+        }
+      ]
     },
     {
       "speaker": "说话人2",
       "text": "好的，我先汇报一下我负责的部分。",
       "start_time": 3.5,
-      "end_time": 6.8
+      "end_time": 6.8,
+      "words": [
+        {
+          "text": "好的",
+          "start": 3.5,
+          "end": 3.8
+        },
+        {
+          "text": "，",
+          "start": 3.8,
+          "end": 3.9
+        },
+        {
+          "text": "我",
+          "start": 3.9,
+          "end": 4.0
+        },
+        {
+          "text": "先",
+          "start": 4.0,
+          "end": 4.2
+        },
+        {
+          "text": "汇报",
+          "start": 4.2,
+          "end": 4.6
+        },
+        {
+          "text": "一下",
+          "start": 4.6,
+          "end": 4.9
+        },
+        {
+          "text": "我",
+          "start": 4.9,
+          "end": 5.0
+        },
+        {
+          "text": "负责",
+          "start": 5.0,
+          "end": 5.3
+        },
+        {
+          "text": "的",
+          "start": 5.3,
+          "end": 5.4
+        },
+        {
+          "text": "部分",
+          "start": 5.4,
+          "end": 5.7
+        },
+        {
+          "text": "。",
+          "start": 5.7,
+          "end": 5.8
+        }
+      ]
     }
   ],
   "summary": {
@@ -1013,6 +1170,8 @@ async loadFileData() {
 }
 ```
 
+**注意**：`words` 字段包含词级别时间戳，用于实现音字同步高亮显示功能。
+
 ---
 
 ### 功能2: 渲染转写内容
@@ -1020,7 +1179,7 @@ async loadFileData() {
 #### 2.1 渲染逻辑
 
 ```javascript
-// result.js 第98-126行
+// result.js 第103-208行
 renderTranscript() {
     const transcriptContent = document.getElementById('transcript-content');
     if (!transcriptContent) return;
@@ -1035,20 +1194,57 @@ renderTranscript() {
         return;
     }
     
-    const html = this.transcriptData.map((entry, index) => `
-        <div class="transcript-entry" 
-             data-index="${index}" 
-             data-start-time="${entry.start_time || 0}">
-            <div class="speaker-info">
-                <span class="speaker-label">${this.escapeHtml(entry.speaker || '发言人')}</span>
-                <span class="timestamp">${this.formatTime(entry.start_time)} - ${this.formatTime(entry.end_time)}</span>
-            </div>
-            <div class="transcript-text">${this.escapeHtml(entry.text || '')}</div>
-        </div>
-    `).join('');
+    const html = this.transcriptData.map((entry, index) => {
+        // 如果有词级别时间戳，使用词级别渲染
+        if (entry.words && entry.words.length > 0) {
+            const wordsHtml = entry.words.map((word, wordIndex) => {
+                return `<span class="word-item" 
+                       data-start="${word.start}" 
+                       data-end="${word.end}"
+                       data-sentence-index="${index}"
+                       data-word-index="${wordIndex}">${this.escapeHtml(word.text)}</span>`;
+            }).join('');
+            
+            return `
+                <div class="transcript-entry" data-index="${index}" data-start-time="${entry.start_time || 0}">
+                    <div class="speaker-info">
+                        <span class="speaker-label">${this.escapeHtml(entry.speaker || '发言人')}</span>
+                        <span class="timestamp">${this.formatTime(entry.start_time)} - ${this.formatTime(entry.end_time)}</span>
+                    </div>
+                    <div class="transcript-text">${wordsHtml}</div>
+                </div>
+            `;
+        } else {
+            // 降级到句子级别渲染（兼容旧数据）
+            return `
+                <div class="transcript-entry" data-index="${index}" data-start-time="${entry.start_time || 0}">
+                    <div class="speaker-info">
+                        <span class="speaker-label">${this.escapeHtml(entry.speaker || '发言人')}</span>
+                        <span class="timestamp">${this.formatTime(entry.start_time)} - ${this.formatTime(entry.end_time)}</span>
+                    </div>
+                    <div class="transcript-text">${this.escapeHtml(entry.text || '')}</div>
+                </div>
+            `;
+        }
+    }).join('');
     
     transcriptContent.innerHTML = html;
     this.bindTranscriptClickEvents(); // 绑定点击事件
+    
+    // 延迟缓存词元素，确保DOM完全更新
+    setTimeout(() => {
+        this.wordElements = document.querySelectorAll('.word-item');
+        // 为每个词元素添加点击事件
+        this.wordElements.forEach((wordEl) => {
+            wordEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const startTime = parseFloat(wordEl.dataset.start);
+                if (!isNaN(startTime)) {
+                    this.seekToTime(startTime);
+                }
+            });
+        });
+    }, 0);
 }
 ```
 
@@ -1058,6 +1254,7 @@ renderTranscript() {
 - **说话人标签**: 说话人1、说话人2...
 - **时间戳**: 开始时间 - 结束时间 (mm:ss)
 - **转写文本**: 完整的发言内容
+- **词级别时间戳** (可选): `words` 数组，包含每个词或短语的精确时间戳
 
 #### 2.3 交互功能
 
@@ -1141,6 +1338,171 @@ loadAudio() {
 | 音量调节 | HTML5 Audio原生 | 无 |
 | 播放速度 | `audioPlayer.playbackRate` | 无 |
 | 跳转时间 | `audioPlayer.currentTime` | 无 |
+
+---
+
+### 功能3.5: 音字同步高亮显示 ⭐ 新功能
+
+#### 3.5.1 功能概述
+
+音字同步功能实现了音频播放与转写文字的实时同步，播放音频时自动高亮当前播放位置对应的转写文字，提升用户体验。
+
+#### 3.5.2 实现原理
+
+**1. 监听音频播放时间更新**
+
+```javascript
+// result.js 第57-60行
+const audioPlayer = document.getElementById('audio-player');
+audioPlayer?.addEventListener('timeupdate', () => this.updateCurrentTime());
+```
+
+**2. 获取当前播放时间并匹配词**
+
+```javascript
+// result.js 第269-280行
+updateCurrentTime() {
+    const audioPlayer = document.getElementById('audio-player');
+    if (!audioPlayer) return;
+    
+    const currentTimeValue = audioPlayer.currentTime;
+    
+    // 音字同步：高亮当前播放的词
+    this.highlightCurrentWord(currentTimeValue);
+}
+```
+
+**3. 高亮匹配的词**
+
+```javascript
+// result.js 第282-357行
+highlightCurrentWord(currentTime) {
+    // 如果没有词元素，尝试重新获取
+    if (!this.wordElements || this.wordElements.length === 0) {
+        this.wordElements = document.querySelectorAll('.word-item');
+        if (!this.wordElements || this.wordElements.length === 0) {
+            return;
+        }
+    }
+    
+    // 验证当前时间有效性
+    if (isNaN(currentTime) || currentTime < 0) {
+        return;
+    }
+    
+    // 查找当前时间对应的词
+    let foundWord = null;
+    let lastWordEl = null;
+    
+    for (let wordEl of this.wordElements) {
+        const start = parseFloat(wordEl.dataset.start);
+        const end = parseFloat(wordEl.dataset.end);
+        
+        // 验证时间戳有效性
+        if (isNaN(start) || isNaN(end) || start < 0 || end < 0) {
+            continue;
+        }
+        
+        // 记录最后一个有效的词元素
+        lastWordEl = wordEl;
+        
+        // 区间判断：当前时间是否在 [start, end) 范围内
+        // 使用左闭右开区间，避免相邻词同时高亮
+        if (currentTime >= start && currentTime < end) {
+            foundWord = wordEl;
+            break;
+        }
+    }
+    
+    // 如果没找到匹配的词，但当前时间在最后一个词的范围内，高亮最后一个词
+    if (!foundWord && lastWordEl) {
+        const lastStart = parseFloat(lastWordEl.dataset.start);
+        const lastEnd = parseFloat(lastWordEl.dataset.end);
+        if (!isNaN(lastStart) && !isNaN(lastEnd) && currentTime >= lastStart && currentTime <= lastEnd) {
+            foundWord = lastWordEl;
+        }
+    }
+    
+    // 如果找到匹配的词且与上次不同，更新高亮
+    if (foundWord && foundWord !== this.lastHighlightedWord) {
+        // 移除所有旧的高亮
+        if (this.lastHighlightedWord) {
+            this.lastHighlightedWord.classList.remove('active');
+        }
+        
+        // 添加新高亮
+        foundWord.classList.add('active');
+        this.lastHighlightedWord = foundWord;
+        
+        // 滚动到可见区域
+        const rect = foundWord.getBoundingClientRect();
+        const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+        if (!isVisible) {
+            foundWord.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center',
+                inline: 'nearest'
+            });
+        }
+    } else if (!foundWord && this.lastHighlightedWord) {
+        // 如果没有找到匹配的词，移除高亮
+        this.lastHighlightedWord.classList.remove('active');
+        this.lastHighlightedWord = null;
+    }
+}
+```
+
+#### 3.5.3 关键特性
+
+| 特性 | 说明 |
+|-----|------|
+| **实时同步** | 监听 `timeupdate` 事件（约每250ms触发一次），实时更新高亮 |
+| **精确匹配** | 使用左闭右开区间 `[start, end)` 避免相邻词同时高亮 |
+| **性能优化** | 缓存词元素到 `this.wordElements`，避免重复查询DOM |
+| **防抖处理** | 使用 `this.lastHighlightedWord` 避免重复操作 |
+| **自动滚动** | 高亮词不在可见区域时自动滚动到中心位置 |
+| **点击跳转** | 点击转写文字可跳转到对应音频位置 |
+| **向后兼容** | 支持词级别和句子级别两种模式，兼容旧数据 |
+
+#### 3.5.4 CSS样式
+
+高亮样式定义在 `static/css/result.css`：
+
+```css
+/* 当前播放的词高亮样式 */
+.word-item.active {
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    color: #000;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(255, 215, 0, 0.4);
+    padding: 2px 4px;
+    border-radius: 4px;
+    animation: wordHighlight 0.3s ease;
+}
+```
+
+#### 3.5.5 数据依赖
+
+- **必需字段**：`transcript[].words[]` - 词级别时间戳数组
+- **字段结构**：
+  ```json
+  {
+    "text": "大家",
+    "start": 0.5,
+    "end": 0.8
+  }
+  ```
+- **时间单位**：秒（浮点数）
+
+#### 3.5.6 用户体验
+
+- ✅ 播放音频时，转写文字自动高亮，清晰显示当前播放位置
+- ✅ 高亮词自动滚动到可见区域，无需手动滚动
+- ✅ 点击转写文字可快速跳转到对应音频位置
+- ✅ 支持播放速度调节，高亮同步跟随
+- ✅ 平滑的动画效果，提升视觉体验
+
+**无API调用**: 纯前端功能，基于后端返回的词级别时间戳数据实现。
 
 ---
 
@@ -1629,10 +1991,14 @@ const results = this.transcriptData.filter(entry =>
 
 | API接口 | 调用时机 | 频率 |
 |--------|---------|------|
-| `GET /api/voice/result/{file_id}` | 页面加载 | 1次 |
+| `GET /api/voice/result/{file_id}` | 页面加载 | 1次（返回包含words字段的转写结果） |
 | `GET /api/voice/audio/{file_id}` | 音频播放器加载 | 1次 |
 | `GET /api/voice/download_transcript/{file_id}` | 点击下载按钮 | 按需 |
 | `GET /api/audio/{file_id}?download=1` | 点击下载音频 | 按需 |
+
+**注意**：
+- `GET /api/voice/result/{file_id}` 返回的 `transcript` 数组中每个条目现在包含可选的 `words` 字段（词级别时间戳）
+- 前端使用 `words` 字段实现音字同步高亮显示功能（无需额外API调用）
 
 ---
 
@@ -1645,6 +2011,8 @@ const results = this.transcriptData.filter(entry =>
 3. **智能降级**: WebSocket失败时自动切换到轮询
 4. **批量处理**: 支持多文件并发上传和转写
 5. **用户友好**: 清晰的状态提示和错误处理
+6. **音字同步**: 基于词级别时间戳实现音频播放与文字的实时同步
+7. **平滑体验**: 智能进度追踪器确保进度条平滑推进，避免跳跃
 
 ### 技术亮点
 
@@ -1653,6 +2021,9 @@ const results = this.transcriptData.filter(entry =>
 - ✅ **智能状态管理**: 根据状态显示不同操作
 - ✅ **前端优化**: 搜索、播放控制等无需请求服务器
 - ✅ **错误容错**: 完善的错误处理和用户提示
+- ✅ **音字同步高亮**: 基于词级别时间戳实现音频播放与文字的实时同步
+- ✅ **智能进度追踪**: 后台线程平滑推进进度，避免进度条跳跃
+- ✅ **词级别时间戳**: 支持逐词时间戳，实现精确的音字同步
 
 ### 数据流向
 
@@ -1674,14 +2045,46 @@ WebSocket推送 / HTTP响应
 
 ---
 
-## 最新更新 (v3.1.1-FunASR, 2025-11-13)
+## 最新更新
 
-### 功能增强
+### v3.1.2-FunASR (2025-11-25)
+
+**功能增强**
+
+#### 新增功能
+- ✅ **词级别时间戳**：后端自动生成每个词或短语的精确时间戳
+  - 优先使用 FunASR 原生词级别时间戳（如果模型支持）
+  - 降级方案：使用 Jieba 分词 + 线性插值生成时间戳
+  - 确保所有转写结果都包含词级别时间信息
+- ✅ **音字同步高亮显示**：前端实现音频播放与转写文字的实时同步
+  - 播放音频时自动高亮当前播放位置对应的转写文字
+  - 支持点击转写文字跳转到对应音频位置
+  - 自动滚动到高亮词，提升阅读体验
+  - 支持词级别和句子级别两种模式，向后兼容
+- ✅ **进度条细化优化**：避免进度条跳跃显示，提升用户体验
+  - 智能进度追踪器：后台线程平滑推进进度，每1%逐步更新
+  - WebSocket去重机制：避免发送重复的进度值，减少网络开销
+  - 前端防回退保护：确保进度只增不减，忽略网络延迟导致的进度回退
+  - 快速追赶机制：任务完成时极速补齐进度，保证视觉连续性
+
+#### 技术改进
+- ✅ 优化了词级别时间戳的生成逻辑，确保文本完整性
+- ✅ 改进了前端高亮匹配算法，使用左闭右开区间避免相邻词同时高亮
+- ✅ 优化了 DOM 元素缓存机制，提升性能
+- ✅ 添加了时间戳验证和错误处理，提高健壮性
+- ✅ 实现了智能进度追踪器，后台线程平滑推进进度，避免进度条跳跃
+- ✅ 优化了 WebSocket 消息发送逻辑，减少重复消息和网络开销
+
+### v3.1.1-FunASR (2025-11-13)
+
+**功能增强与修复**
+
+#### 新增功能
 - ✅ **真正的停止转写功能**：现在可以真正中断转写任务，通过 `_cancelled` 标志和 `InterruptedError` 机制实现
 - ✅ **清空Dify生成文件**：新增清空Dify生成文件功能，可精确删除Dify一站式转写生成的.zip文件及其对应的音频文件
 - ✅ **清空所有历史记录**：新增一键清空所有历史记录功能
 
-### 问题修复
+#### 问题修复
 - ✅ **文件名唯一性修复**：修复了批量转写时文件名冲突问题，使用微秒级时间戳和 `file_id` 确保唯一性
 - ✅ **删除已停止转写文件**：修复了停止转写后无法删除文件的问题
 - ✅ **WebSocket进度跳转修复**：修复了转写进度反复跳转的问题，确保进度只增不减
