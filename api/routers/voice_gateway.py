@@ -672,13 +672,14 @@ async def transcribe_all(
                     send_ws_message_sync(file_id, 'processing', progress, message or f"处理中: {step}")
                 
                 # 执行转写
-                pipeline_service.set_callback(update_progress)
+                # ✅ 修复：直接传递 callback，避免多任务共享状态冲突
                 transcript, _, _ = pipeline_service.execute_transcription(
                     file_info['filepath'],
                     hotword=file_info['hotword'],
                     language=file_info['language'],
                     instance_id=file_id,
-                    cancellation_flag=lambda: file_info.get('_cancelled', False)  # 传递取消检查函数
+                    cancellation_flag=lambda: file_info.get('_cancelled', False),  # 传递取消检查函数
+                    callback=update_progress  # 直接传递 callback，每个任务有独立的 tracker
                 )
                 
                 # 检查是否在转写过程中被取消
@@ -1305,12 +1306,13 @@ async def update_file(file_id: str, request: Request):
                         send_ws_message_sync(file_id, 'processing', progress, message)
                     
                     # ✅ 执行转写（不再需要全局锁）
-                    pipeline_service.set_callback(update_progress)
+                    # ✅ 修复：直接传递 callback，避免多任务共享状态冲突
                     transcript, _, _ = pipeline_service.execute_transcription(
                         file_info['filepath'],
                         hotword=hotword,
                         language=language,
-                        instance_id=file_id
+                        instance_id=file_id,
+                        callback=update_progress  # 直接传递 callback，每个任务有独立的 tracker
                     )
                     
                     if transcript:
@@ -1518,8 +1520,7 @@ async def transcribe(request: Request):
                 )
             
             # ✅ 不再需要全局锁 - 模型池已经处理并发
-            # 设置回调
-            pipeline_service.set_callback(update_file_progress)
+            # ✅ 修复：直接传递 callback，避免多任务共享状态冲突
             
             # 再次检查是否已被取消
             if file_info.get('_cancelled', False):
@@ -1534,7 +1535,8 @@ async def transcribe(request: Request):
                 hotword=hotword,
                 language=language,
                 instance_id=file_id,
-                cancellation_flag=lambda: file_info.get('_cancelled', False)  # 传递取消检查函数
+                cancellation_flag=lambda: file_info.get('_cancelled', False),  # 传递取消检查函数
+                callback=update_file_progress  # 直接传递 callback，每个任务有独立的 tracker
             )
             
             # 检查是否在转写过程中被取消

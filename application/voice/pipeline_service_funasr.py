@@ -124,15 +124,21 @@ class PipelineService:
         )
         self.text_processor = TextProcessor()
         self.diarization_processor = DiarizationProcessor()
-        
-        self.callback: Optional[Callable] = None
-        self.tracker: Optional[SmartProgressTracker] = None
     
     def set_callback(self, callback: Callable):
-        self.callback = callback
-        self.tracker = SmartProgressTracker(self._update_status)
+        """
+        ⚠️ 已废弃：此方法会导致多任务共享状态冲突
+        请直接在 execute_transcription 中传递 callback 参数
+        """
+        import warnings
+        warnings.warn(
+            "set_callback() 已废弃，请使用 execute_transcription(callback=...) 参数",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        # 保留此方法仅用于向后兼容，但不再使用
     
-    def _update_status(self, step: str, progress: int, message: str = "", data: Dict = None):
+    def _update_status(self, callback: Optional[Callable], step: str, progress: int, message: str = "", data: Dict = None):
         """发送状态更新"""
         # 终端显示
         bar_len = 20
@@ -142,14 +148,15 @@ class PipelineService:
         if progress >= 100: print() # 换行
 
         # WebSocket回调
-        if self.callback:
-            self.callback(step, progress, message, data)
+        if callback:
+            callback(step, progress, message, data)
     
     def execute_transcription(self, input_audio_path: str, 
                             hotword: str = '', 
                             language: str = 'zh',
                             instance_id: str = None,
-                            cancellation_flag: Optional[Callable] = None) -> tuple:
+                            cancellation_flag: Optional[Callable] = None,
+                            callback: Optional[Callable] = None) -> tuple:
         
         if not instance_id:
             import uuid
@@ -159,47 +166,55 @@ class PipelineService:
             if cancellation_flag and cancellation_flag():
                 raise InterruptedError("任务已取消")
 
+        # ✅ 修复：为每个任务创建独立的 tracker，避免多任务共享状态冲突
+        # 创建包装函数，将 callback 传递给 _update_status
+        def update_status_wrapper(step: str, progress: int, message: str = "", data: Dict = None):
+            self._update_status(callback, step, progress, message, data)
+        
+        # 为当前任务创建独立的 tracker
+        tracker = SmartProgressTracker(update_status_wrapper)
+
         try:
             check_cancelled()
-            self._update_status("开始", 0, "初始化转写任务...")
+            self._update_status(callback, "开始", 0, "初始化转写任务...")
             start_time = datetime.now()
             
             # 1. 准备音频 (0-10%)
-            self.tracker.start_phase("准备音频", "正在处理音频文件...", 0, 10, estimated_time=2.0)
+            tracker.start_phase("准备音频", "正在处理音频文件...", 0, 10, estimated_time=2.0)
             
             audio_bytes, duration = self.audio_processor.prepare_audio_bytes(input_audio_path)
             if audio_bytes is None:
-                self.tracker.stop()
+                tracker.stop()
                 return None, None, None
                 
-            self.tracker.complete_phase() # 瞬间补齐到 10%
+            tracker.complete_phase() # 瞬间补齐到 10%
 
             # 2. 准备识别 (10-30%)
-            self.tracker.start_phase("准备识别", "加载模型与资源...", 10, 30, estimated_time=1.0)
+            tracker.start_phase("准备识别", "加载模型与资源...", 10, 30, estimated_time=1.0)
             time.sleep(0.1) # 模拟极短耗时
-            self.tracker.complete_phase() # 瞬间补齐到 30%
+            tracker.complete_phase() # 瞬间补齐到 30%
 
             # 3. 核心转写 (30-80%)
             # 估算时间：至少5秒，或者音频时长的15%
             est_time = max(duration * 0.15, 5.0)
-            self.tracker.start_phase("语音转录", "正在进行语音识别...", 30, 80, estimated_time=est_time)
+            tracker.start_phase("语音转录", "正在进行语音识别...", 30, 80, estimated_time=est_time)
             
             transcript_list = self.asr_runner.transcribe_with_speaker(audio_bytes, hotword=hotword)
             
             check_cancelled()
             if not transcript_list:
-                self.tracker.stop()
+                tracker.stop()
                 return None, None, None
                 
-            self.tracker.complete_phase() # 业务完成，瞬间补齐到 80%
+            tracker.complete_phase() # 业务完成，瞬间补齐到 80%
 
             # 4. 合并片段 (80-90%)
-            self.tracker.start_phase("合并片段", f"识别完成，正在整理片段...", 80, 90, estimated_time=1.0)
+            tracker.start_phase("合并片段", f"识别完成，正在整理片段...", 80, 90, estimated_time=1.0)
             merged_transcript = self.diarization_processor.merge_consecutive_segments(transcript_list)
-            self.tracker.complete_phase() # 瞬间补齐到 90%
+            tracker.complete_phase() # 瞬间补齐到 90%
 
             # 5. 文本处理 (90-95%)
-            self.tracker.start_phase("文本处理", "正在优化文本内容...", 90, 95, estimated_time=0.5)
+            tracker.start_phase("文本处理", "正在优化文本内容...", 90, 95, estimated_time=0.5)
             for entry in merged_transcript:
                 if 'text' in entry:
                     original_text = entry['text']
@@ -216,19 +231,19 @@ class PipelineService:
                         )
                     
                     entry['text'] = fixed_text
-            self.tracker.complete_phase() # 瞬间补齐到 95%
+            tracker.complete_phase() # 瞬间补齐到 95%
 
             # =================================================
             # 6. 清理与完成 (95-100%) - 关键修改部分
             # =================================================
             # 注意：这里 end_pct 设为 99，而不是 100
             # 我们把 100% 留给最后一步显式调用，确保此时能够计算出准确的耗时
-            self.tracker.start_phase("完成", "正在清理临时文件...", 95, 99, estimated_time=0.5)
+            tracker.start_phase("完成", "正在清理临时文件...", 95, 99, estimated_time=0.5)
             
             self.storage.cleanup_temp_files(instance_id)
             
             # 追赶到 99% (此时 message 还是 "正在清理...")
-            self.tracker.complete_phase()
+            tracker.complete_phase()
             
             # --- 计算最终耗时并发送 100% ---
             end_time = datetime.now()
@@ -238,22 +253,22 @@ class PipelineService:
             
             # 显式发送 100% 状态，带上耗时信息
             # 这样前端收到的 {progress: 100} 消息中就会包含准确的耗时
-            self._update_status("完成", 100, final_message)
+            self._update_status(callback, "完成", 100, final_message)
             
             logger.info(f"✅ {final_message}")
             
             # 停止追踪器（虽已完成，但也确保清理资源）
-            self.tracker.stop()
+            tracker.stop()
             
             return merged_transcript, None, None
 
         except InterruptedError:
-            self.tracker.stop()
+            tracker.stop()
             logger.info(f"任务 {instance_id} 已取消")
             self.storage.cleanup_temp_files(instance_id)
             raise
         except Exception as e:
-            self.tracker.stop()
+            tracker.stop()
             logger.error(f"转写流程异常: {e}")
             import traceback
             traceback.print_exc()

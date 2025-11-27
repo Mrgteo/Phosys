@@ -1088,6 +1088,83 @@ body {
     color: #2d3748;
 }
 
+/* 进度条单元格 */
+.file-progress-cell {
+    position: relative;
+    padding: 12px 15px !important;
+    min-width: 200px;
+    vertical-align: middle;
+}
+
+/* 进度条容器 */
+.file-progress-container {
+    width: 100%;
+    height: 24px;
+    background: #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 进度条 */
+.file-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4299e1 0%, #3182ce 50%, #2c5282 100%);
+    border-radius: 10px;
+    transition: width 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(66, 153, 225, 0.3);
+}
+
+/* 转写中状态的进度条动画 */
+.file-progress-bar.processing {
+    background: linear-gradient(90deg, #f6ad55 0%, #ed8936 50%, #dd6b20 100%);
+    animation: progress-pulse 2s ease-in-out infinite;
+}
+
+/* 已完成状态的进度条 */
+.file-progress-bar.completed {
+    background: linear-gradient(90deg, #48bb78 0%, #38a169 50%, #2f855a 100%);
+}
+
+/* 错误状态的进度条 */
+.file-progress-bar.error {
+    background: linear-gradient(90deg, #fc8181 0%, #f56565 50%, #e53e3e 100%);
+}
+
+/* 进度条文本 */
+.file-progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+    z-index: 1;
+}
+
+/* 进度条为空时的占位符 */
+.file-progress-empty {
+    color: #a0aec0;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+/* 进度条动画 */
+@keyframes progress-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
 /* 上传状态 */
 .upload-status-badge {
     display: inline-flex;

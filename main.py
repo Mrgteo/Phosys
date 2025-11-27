@@ -263,6 +263,14 @@ async def shutdown_event():
     """应用关闭"""
     logger.info("正在关闭应用...")
     
+    # 关闭WebSocket连接管理器
+    try:
+        from infra.websocket import ws_manager
+        await ws_manager.shutdown()
+        logger.info("✅ WebSocket连接管理器已关闭")
+    except Exception as e:
+        logger.error(f"关闭WebSocket连接管理器失败: {e}")
+    
     # 关闭模型池
     global asr_runner
     try:

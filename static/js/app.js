@@ -468,9 +468,40 @@ class TranscriptionApp {
                 `;
             }
             
+            // 获取进度值（默认为0）
+            const progress = file.progress || 0;
+            
+            // 生成进度条HTML（在转写中、已完成或出错时显示）
+            let progressBarHtml = '';
+            if (file.status === 'processing' || file.status === 'completed' || file.status === 'error') {
+                // 根据状态添加不同的class
+                let progressBarClass = '';
+                if (file.status === 'processing') {
+                    progressBarClass = 'processing';
+                } else if (file.status === 'completed') {
+                    progressBarClass = 'completed';
+                } else if (file.status === 'error') {
+                    progressBarClass = 'error';
+                }
+                
+                // 确保进度值在0-100之间
+                const safeProgress = Math.max(0, Math.min(100, progress));
+                
+                progressBarHtml = `
+                    <div class="file-progress-container">
+                        <div class="file-progress-bar ${progressBarClass}" style="width: ${safeProgress}%">
+                            <span class="file-progress-text">${safeProgress}%</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
             return `
                 <tr data-file-id="${file.id}">
                     <td class="file-title">${file.original_name}</td>
+                    <td class="file-progress-cell">
+                        ${progressBarHtml || '<span class="file-progress-empty">-</span>'}
+                    </td>
                     <td>${file.upload_time}</td>
                     <td>
                         <span class="upload-status-badge ${statusClass}">
