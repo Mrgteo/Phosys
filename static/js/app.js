@@ -56,14 +56,9 @@ class TranscriptionApp {
         
         // 历史记录操作按钮事件（使用事件委托，因为按钮在模态框内）
         document.addEventListener('click', (e) => {
-            const btnClearDify = e.target.closest('#btn-clear-dify');
             const btnClearAll = e.target.closest('#btn-clear-all');
             
-            if (btnClearDify) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.clearDifyFiles();
-            } else if (btnClearAll) {
+            if (btnClearAll) {
                 e.preventDefault();
                 e.stopPropagation();
                 this.clearAllHistory();
@@ -874,31 +869,6 @@ class TranscriptionApp {
         }
     }
 
-    async clearDifyFiles() {
-        if (!confirm('确定要清空dify生成文件吗？\n\n这将删除：\n- 所有dify生成的.zip文件\n- 对应的上传音频文件\n- 相关的转写文档')) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/voice/files/_clear_dify', {
-                method: 'DELETE'
-            });
-            const result = await response.json();
-            
-            if (result.success) {
-                const deleted = result.deleted || {};
-                const message = `清空dify生成文件成功！\n删除：${deleted.zip_files || 0} 个ZIP文件，${deleted.audio_files || 0} 个音频文件，${deleted.records || 0} 条历史记录`;
-                this.showSuccess(message);
-                await this.loadHistoryRecords();
-                await this.loadUploadedFiles(); // 刷新主列表
-            } else {
-                this.showError(result.message || '清空失败');
-            }
-        } catch (error) {
-            this.showError('清空失败: ' + error.message);
-        }
-    }
-
     async clearAllHistory() {
         if (!confirm('⚠️ 警告：确定要清空所有历史记录吗？\n\n这将删除：\n- 所有音频文件\n- 所有转写文档\n- 所有会议纪要\n- 所有输出文件（.zip、.docx等）\n\n此操作不可恢复！')) {
             return;
@@ -917,7 +887,7 @@ class TranscriptionApp {
             
             if (result.success) {
                 const deleted = result.deleted || {};
-                const message = `清空所有历史记录成功！\n删除：${deleted.audio_files || 0} 个音频文件，${deleted.transcript_files || 0} 个转写文档，${deleted.records || 0} 条历史记录`;
+                const message = `清空所有历史记录成功！\n删除：${deleted.audio_files || 0} 个音频文件，${deleted.transcript_files || 0} 个转写文档，${deleted.summary_files || 0} 个会议纪要文档，${deleted.records || 0} 条历史记录`;
                 this.showSuccess(message);
                 await this.loadHistoryRecords();
                 await this.loadUploadedFiles(); // 刷新主列表

@@ -13,6 +13,16 @@ from infra.runners.asr_runner_funasr import ASRRunner
 
 logger = logging.getLogger(__name__)
 
+# 导入 Dify 报警模块
+# 注意：只导入 log_error_alarm，SUCCESS 报警由 VoiceGateway 层统一发送
+try:
+    from infra.monitoring.dify_webhook_sender import log_error_alarm
+    DIFY_ALARM_ENABLED = True
+    logger.info("✅ Dify 报警模块已加载")
+except ImportError as e:
+    DIFY_ALARM_ENABLED = False
+    logger.warning(f"⚠️ Dify 报警模块未找到，报警功能已禁用: {e}")
+
 class SmartProgressTracker:
     """
     智能进度追踪器
@@ -185,6 +195,14 @@ class PipelineService:
             audio_bytes, duration = self.audio_processor.prepare_audio_bytes(input_audio_path)
             if audio_bytes is None:
                 tracker.stop()
+                # --- 发送 ERROR 报警：音频准备失败 ---
+                if DIFY_ALARM_ENABLED:
+                    log_error_alarm(
+                        task_id=instance_id,
+                        module="AudioProcessor",
+                        message="音频准备失败，无法读取或处理音频文件",
+                        exception=None
+                    )
                 return None, None, None
                 
             tracker.complete_phase() # 瞬间补齐到 10%
@@ -204,6 +222,14 @@ class PipelineService:
             check_cancelled()
             if not transcript_list:
                 tracker.stop()
+                # --- 发送 ERROR 报警：转写结果为空 ---
+                if DIFY_ALARM_ENABLED:
+                    log_error_alarm(
+                        task_id=instance_id,
+                        module="ASR_Core",
+                        message="语音转写返回空结果，可能是音频质量问题或模型异常",
+                        exception=None
+                    )
                 return None, None, None
                 
             tracker.complete_phase() # 业务完成，瞬间补齐到 80%
@@ -247,15 +273,22 @@ class PipelineService:
             
             # --- 计算最终耗时并发送 100% ---
             end_time = datetime.now()
-            elapsed = (end_time - start_time).seconds
+            elapsed = (end_time - start_time).total_seconds()  # 使用 total_seconds() 获取更精确的耗时
             
-            final_message = f"转写完成，耗时{elapsed}秒"
+            # 计算转写字数
+            total_chars = sum(len(entry.get('text', '')) for entry in merged_transcript) if merged_transcript else 0
+            segment_count = len(merged_transcript) if merged_transcript else 0
+            
+            final_message = f"转写完成，耗时{elapsed:.1f}秒"
             
             # 显式发送 100% 状态，带上耗时信息
             # 这样前端收到的 {progress: 100} 消息中就会包含准确的耗时
             self._update_status(callback, "完成", 100, final_message)
             
             logger.info(f"✅ {final_message}")
+            
+            # 注意：SUCCESS 报警由 VoiceGateway 层统一发送，避免重复
+            # PipelineService 只负责 ERROR 报警
             
             # 停止追踪器（虽已完成，但也确保清理资源）
             tracker.stop()
@@ -272,5 +305,15 @@ class PipelineService:
             logger.error(f"转写流程异常: {e}")
             import traceback
             traceback.print_exc()
+            
+            # --- 发送 ERROR 报警到 Dify ---
+            if DIFY_ALARM_ENABLED:
+                log_error_alarm(
+                    task_id=instance_id,
+                    module="PipelineService",
+                    message=f"转写流程异常: {str(e)}",
+                    exception=e
+                )
+            
             self.storage.cleanup_temp_files(instance_id)
             return None, None, None

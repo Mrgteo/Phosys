@@ -25,11 +25,71 @@ class ResultViewer {
 
     bindEvents() {
         // 返回按钮
-        document.getElementById('back-btn')?.addEventListener('click', () => this.goBack());
+        const backBtn = document.getElementById('back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => this.goBack());
+        }
         
         // 下载按钮
-        document.getElementById('download-transcript-btn')?.addEventListener('click', () => this.downloadTranscript());
-        document.getElementById('download-audio-btn-menu')?.addEventListener('click', () => this.downloadAudio());
+        const downloadTranscriptBtn = document.getElementById('download-transcript-btn');
+        if (downloadTranscriptBtn) {
+            downloadTranscriptBtn.addEventListener('click', () => this.downloadTranscript());
+        }
+        
+        const downloadAudioBtn = document.getElementById('download-audio-btn-menu');
+        if (downloadAudioBtn) {
+            downloadAudioBtn.addEventListener('click', () => this.downloadAudio());
+        }
+        
+        // 会议纪要按钮
+        const generateSummaryBtn = document.getElementById('generate-summary-btn');
+        if (generateSummaryBtn) {
+            generateSummaryBtn.addEventListener('click', () => {
+                console.log('生成会议纪要按钮被点击');
+                this.showSummarySettingsModal();
+            });
+        } else {
+            console.error('未找到生成会议纪要按钮');
+        }
+        
+        // 会议纪要设置窗口按钮
+        const exitSummaryModalBtn = document.getElementById('exit-summary-modal-btn');
+        if (exitSummaryModalBtn) {
+            exitSummaryModalBtn.addEventListener('click', () => {
+                this.closeSummarySettingsModal();
+            });
+        }
+        
+        const startGenerateBtn = document.getElementById('start-generate-btn');
+        if (startGenerateBtn) {
+            startGenerateBtn.addEventListener('click', () => {
+                this.startGenerateSummary();
+            });
+        }
+        
+        const downloadSummaryBtnModal = document.getElementById('download-summary-btn-modal');
+        if (downloadSummaryBtnModal) {
+            downloadSummaryBtnModal.addEventListener('click', () => {
+                this.downloadSummaryFromModal();
+            });
+        }
+        
+        const deleteSummaryBtnModal = document.getElementById('delete-summary-btn-modal');
+        if (deleteSummaryBtnModal) {
+            deleteSummaryBtnModal.addEventListener('click', () => {
+                this.deleteSummaryFromModal();
+            });
+        }
+        
+        // 点击模态窗口外部关闭
+        const summaryModal = document.getElementById('summary-settings-modal');
+        if (summaryModal) {
+            summaryModal.addEventListener('click', (e) => {
+                if (e.target === summaryModal) {
+                    this.closeSummarySettingsModal();
+                }
+            });
+        }
         
         // 复制按钮
         document.getElementById('copy-transcript-btn')?.addEventListener('click', () => this.copyTranscript());
@@ -69,15 +129,33 @@ class ResultViewer {
 
     async loadFileData() {
         try {
-            const response = await fetch(`/api/voice/result/${this.fileId}`);
+            // 加载文件数据，包含会议纪要
+            const response = await fetch(`/api/voice/files/${this.fileId}?include_summary=true`);
             const result = await response.json();
             
             if (result.success) {
-                this.fileData = result.file_info;
-                this.transcriptData = result.transcript;
+                this.fileData = result.file;
+                // 如果有转写结果，也加载
+                if (result.transcript) {
+                    this.transcriptData = result.transcript;
+                } else {
+                    // 如果没有转写结果，尝试从 result 接口获取
+                    const transcriptResponse = await fetch(`/api/voice/result/${this.fileId}`);
+                    const transcriptResult = await transcriptResponse.json();
+                    if (transcriptResult.success) {
+                        this.transcriptData = transcriptResult.transcript;
+                    }
+                }
+                
+                // 如果有会议纪要，保存到 fileData 中
+                if (result.summary) {
+                    this.fileData.meeting_summary = result.summary;
+                }
                 
                 this.renderFileInfo();
-                this.renderTranscript();
+                if (this.transcriptData) {
+                    this.renderTranscript();
+                }
                 // 延迟加载音频，确保词元素已缓存
                 setTimeout(() => {
                     this.loadAudio();
@@ -376,6 +454,343 @@ class ResultViewer {
         }
     }
 
+    // 显示会议纪要设置窗口
+    async showSummarySettingsModal() {
+        const modal = document.getElementById('summary-settings-modal');
+        if (modal) {
+            modal.classList.add('show');
+            
+            const previewContent = document.getElementById('summary-preview-content');
+            const downloadBtn = document.getElementById('download-summary-btn-modal');
+            const deleteBtn = document.getElementById('delete-summary-btn-modal');
+            
+            // 先尝试从当前 fileData 获取会议纪要
+            let meetingSummary = this.fileData?.meeting_summary;
+            
+            // 如果没有，尝试从服务器重新加载最新的会议纪要
+            if (!meetingSummary) {
+                try {
+                    const response = await fetch(`/api/voice/files/${this.fileId}?include_summary=true`);
+                    const result = await response.json();
+                    if (result.success && result.summary) {
+                        meetingSummary = result.summary;
+                        // 更新 fileData，保留最近一次生成的会议纪要
+                        if (this.fileData) {
+                            this.fileData.meeting_summary = meetingSummary;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('加载会议纪要失败:', error);
+                }
+            }
+            
+            // 显示会议纪要或空白状态
+            if (meetingSummary) {
+                // 如果有会议纪要，显示它（移除markdown格式）
+                const summaryText = meetingSummary.raw_text || meetingSummary.text || '';
+                const plainText = this.removeMarkdownFormatting(summaryText);
+                if (previewContent) {
+                    previewContent.innerHTML = `<pre>${this.escapeHtml(plainText)}</pre>`;
+                }
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                }
+                if (deleteBtn) {
+                    deleteBtn.disabled = false;
+                }
+            } else {
+                // 如果没有，显示空白状态
+                if (previewContent) {
+                    previewContent.innerHTML = `
+                        <div class="empty-preview">
+                            <i class="fas fa-file-alt"></i>
+                            <p>生成的会议纪要将显示在这里</p>
+                        </div>
+                    `;
+                }
+                if (downloadBtn) {
+                    downloadBtn.disabled = true;
+                }
+                if (deleteBtn) {
+                    deleteBtn.disabled = true;
+                }
+            }
+        }
+    }
+    
+    // 关闭会议纪要设置窗口
+    closeSummarySettingsModal() {
+        const modal = document.getElementById('summary-settings-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
+    }
+    
+    // 开始生成会议纪要
+    async startGenerateSummary() {
+        const btn = document.getElementById('start-generate-btn');
+        const promptInput = document.getElementById('summary-prompt-input');
+        const modelSelect = document.getElementById('summary-model-select');
+        const previewContent = document.getElementById('summary-preview-content');
+        
+        if (!btn || !promptInput || !modelSelect || !previewContent) {
+            console.error('未找到必要的元素');
+            return;
+        }
+        
+        const originalText = btn.innerHTML;
+        const prompt = promptInput.value.trim();
+        const model = modelSelect.value;
+        
+        if (!prompt) {
+            alert('请输入提示词模板');
+            return;
+        }
+        
+        try {
+            // 显示加载状态
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+            
+            // 显示预览加载状态
+            previewContent.innerHTML = `
+                <div class="empty-preview">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+                    <p>正在生成会议纪要，请稍候...</p>
+                </div>
+            `;
+            
+            // 调用API生成会议纪要
+            const response = await fetch(`/api/voice/generate_summary/${this.fileId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    model: model
+                })
+            });
+            
+            // 检查响应状态
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: '生成会议纪要失败' }));
+                throw new Error(errorData.detail || errorData.message || `HTTP ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success && result.summary) {
+                // 更新文件数据
+                if (this.fileData) {
+                    this.fileData.meeting_summary = result.summary;
+                }
+                
+                // 显示生成的会议纪要（移除markdown格式）
+                const summaryText = result.summary.raw_text || result.summary.text || '会议纪要生成成功';
+                const plainText = this.removeMarkdownFormatting(summaryText);
+                previewContent.innerHTML = `<pre>${this.escapeHtml(plainText)}</pre>`;
+                
+                // 启用下载和删除按钮
+                const downloadBtn = document.getElementById('download-summary-btn-modal');
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                }
+                const deleteBtn = document.getElementById('delete-summary-btn-modal');
+                if (deleteBtn) {
+                    deleteBtn.disabled = false;
+                }
+                
+                this.showSuccess('会议纪要生成成功');
+            } else {
+                throw new Error(result.message || '生成会议纪要失败');
+            }
+            
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        } catch (error) {
+            console.error('生成会议纪要失败:', error);
+            alert(error.message || '生成会议纪要失败，请稍后重试');
+            
+            // 恢复预览内容
+            previewContent.innerHTML = `
+                <div class="empty-preview">
+                    <i class="fas fa-exclamation-triangle" style="color: #f56565;"></i>
+                    <p>生成失败：${this.escapeHtml(error.message || '未知错误')}</p>
+                </div>
+            `;
+            
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+    
+    // 从模态窗口删除会议纪要
+    async deleteSummaryFromModal() {
+        const btn = document.getElementById('delete-summary-btn-modal');
+        if (!btn) {
+            console.error('未找到删除按钮');
+            return;
+        }
+        
+        // 确认删除
+        if (!confirm('确定要删除会议纪要吗？此操作不可恢复。')) {
+            return;
+        }
+        
+        const originalText = btn.innerHTML;
+        
+        try {
+            // 显示加载提示
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 删除中...';
+            
+            // 调用API删除会议纪要
+            const response = await fetch(`/api/voice/summary/${this.fileId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                let errorMessage = '删除失败';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.detail || errorData.message || errorMessage;
+                } catch (e) {
+                    errorMessage = `删除失败 (HTTP ${response.status})`;
+                }
+                throw new Error(errorMessage);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // 更新文件数据，移除会议纪要
+                if (this.fileData) {
+                    delete this.fileData.meeting_summary;
+                }
+                
+                // 清空预览内容
+                const previewContent = document.getElementById('summary-preview-content');
+                if (previewContent) {
+                    previewContent.innerHTML = `
+                        <div class="empty-preview">
+                            <i class="fas fa-file-alt"></i>
+                            <p>生成的会议纪要将显示在这里</p>
+                        </div>
+                    `;
+                }
+                
+                // 禁用下载和删除按钮
+                const downloadBtn = document.getElementById('download-summary-btn-modal');
+                if (downloadBtn) {
+                    downloadBtn.disabled = true;
+                }
+                if (btn) {
+                    btn.disabled = true;
+                }
+                
+                this.showSuccess('会议纪要删除成功');
+            } else {
+                throw new Error(result.message || '删除失败');
+            }
+            
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        } catch (error) {
+            console.error('删除会议纪要失败:', error);
+            alert(error.message || '删除失败，请稍后重试');
+            
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash"></i> 删除会议纪要';
+        }
+    }
+    
+    // 从模态窗口下载会议纪要
+    async downloadSummaryFromModal() {
+        const btn = document.getElementById('download-summary-btn-modal');
+        if (!btn) {
+            console.error('未找到下载按钮');
+            return;
+        }
+        
+        const originalText = btn.innerHTML;
+        
+        try {
+            // 显示加载提示
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 下载中...';
+            
+            // 检查是否已生成会议纪要
+            if (!this.fileData || !this.fileData.meeting_summary) {
+                throw new Error('请先生成会议纪要');
+            }
+            
+            // 使用 fetch 下载文件
+            const downloadResponse = await fetch(`/api/voice/download_summary/${this.fileId}`);
+            
+            if (!downloadResponse.ok) {
+                let errorMessage = '下载失败';
+                try {
+                    const errorData = await downloadResponse.json();
+                    errorMessage = errorData.detail || errorData.message || errorMessage;
+                } catch (e) {
+                    errorMessage = `下载失败 (HTTP ${downloadResponse.status})`;
+                }
+                throw new Error(errorMessage);
+            }
+            
+            // 获取文件 blob
+            const blob = await downloadResponse.blob();
+            
+            // 从响应头获取文件名
+            const contentDisposition = downloadResponse.headers.get('content-disposition');
+            let filename = `meeting_summary_${this.fileId}.docx`;
+            
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1].replace(/['"]/g, '');
+                    if (filename.startsWith('UTF-8\'\'')) {
+                        filename = decodeURIComponent(filename.replace(/^UTF-8''/, ''));
+                    }
+                }
+            }
+            
+            // 创建下载链接并触发下载
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+            
+            this.showSuccess('会议纪要下载成功');
+            
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        } catch (error) {
+            console.error('下载会议纪要失败:', error);
+            alert(error.message || '下载失败，请稍后重试');
+            
+            // 恢复按钮状态
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-download"></i> 下载会议纪要';
+        }
+    }
+
+
     changePlaybackSpeed(speed) {
         const audioPlayer = document.getElementById('audio-player');
         if (audioPlayer) {
@@ -515,6 +930,49 @@ class ResultViewer {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    // 移除markdown格式，转换为纯文本
+    removeMarkdownFormatting(text) {
+        if (!text) return '';
+        
+        let result = text;
+        
+        // 移除markdown标题标记 (##, ###, ####)
+        result = result.replace(/^#{1,6}\s+/gm, '');
+        
+        // 移除粗体标记 (**text** 或 __text__)
+        result = result.replace(/\*\*([^*]+)\*\*/g, '$1');
+        result = result.replace(/__([^_]+)__/g, '$1');
+        
+        // 移除斜体标记 (*text* 或 _text_)
+        result = result.replace(/\*([^*]+)\*/g, '$1');
+        result = result.replace(/_([^_]+)_/g, '$1');
+        
+        // 移除代码块标记 (```code``` 或 `code`)
+        result = result.replace(/```[\s\S]*?```/g, '');
+        result = result.replace(/`([^`]+)`/g, '$1');
+        
+        // 移除链接标记 [text](url)
+        result = result.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+        
+        // 移除图片标记 ![alt](url)
+        result = result.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '');
+        
+        // 移除列表标记 (-, *, +, 1.)
+        result = result.replace(/^[\s]*[-*+]\s+/gm, '');
+        result = result.replace(/^\d+\.\s+/gm, '');
+        
+        // 移除引用标记 (>)
+        result = result.replace(/^>\s+/gm, '');
+        
+        // 移除水平线 (---, ***, ___)
+        result = result.replace(/^[-*_]{3,}$/gm, '');
+        
+        // 清理多余的空行（最多保留两个连续空行）
+        result = result.replace(/\n{3,}/g, '\n\n');
+        
+        return result.trim();
     }
 
     escapeRegex(string) {

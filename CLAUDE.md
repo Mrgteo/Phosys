@@ -181,22 +181,20 @@ nohup python main.py > app.log 2>&1 &
 
 ## 📡 API Usage Guide
 
-### Primary Interface: One-Stop Transcription
+### Primary Interface: Transcription API
 
 ```bash
-# Single file with JSON response
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "generate_summary=true" \
-  -F "return_type=json"
+# 1. Upload audio file
+FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting.mp3" | jq -r '.file.id')
 
-# Multiple files with direct ZIP download
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@file1.mp3" \
-  -F "audio_files=@file2.mp3" \
-  -F "return_type=file" \
-  -o transcripts.zip
+# 2. Start transcription (wait for completion)
+curl -X POST "http://localhost:8998/api/voice/transcribe" \
+  -H "Content-Type: application/json" \
+  -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"wait\": true}"
+
+# 3. Get result
+curl "http://localhost:8998/api/voice/result/$FILE_ID"
 ```
 
 ### RESTful File Management
@@ -320,17 +318,23 @@ pip install new-package==1.0.0
 
 ## 🔄 Version Information
 
-- **Current Version**: 3.1.1-FunASR
+- **Current Version**: 3.1.3-FunASR
 - **Architecture**: DDD with FunASR integration
-- **Last Updated**: 2025-11-13
+- **Last Updated**: 2025-12-04
 - **Python Version**: 3.8+
 - **Framework**: FastAPI 0.120.4
 
-### Recent Updates (v3.1.1-FunASR, 2025-11-13)
+### Recent Updates (v3.1.3-FunASR, 2025-12-04)
+
+#### API Simplification
+- ✅ **Removed One-Stop Transcription Interface**: Deleted `/api/voice/transcribe_all` endpoint
+- ✅ **Removed Clear Dify Files Feature**: Deleted `_clear_dify` special operation
+- ✅ **Enhanced Transcription API**: Improved `POST /api/voice/transcribe` with `wait=true` to return transcript directly without words field
+
+### Previous Updates (v3.1.1-FunASR, 2025-11-13)
 
 #### New Features
 - ✅ **True Stop Transcription**: Implemented real task interruption using `_cancelled` flag and `InterruptedError` mechanism
-- ✅ **Clear Dify Generated Files**: New endpoint `DELETE /api/voice/files/_clear_dify` to precisely delete Dify-generated .zip files and corresponding audio files
 - ✅ **Clear All History**: New endpoint `DELETE /api/voice/files/_clear_all` to clear all transcription history
 
 #### Bug Fixes

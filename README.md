@@ -63,7 +63,6 @@
 - 转写历史记录持久化存储
 - 支持重新转写和追加生成纪要
 - 支持停止转写任务（真正中断转写进程）
-- 支持批量清空Dify生成文件
 - 支持一键清空所有历史记录
 
 ### 5. 音字同步高亮显示
@@ -202,45 +201,6 @@ nohup python main.py > app.log 2>&1 &
 
 ## 📡 API 接口
 
-### 一站式转写接口
-
-#### POST `/api/voice/transcribe_all`
-
-**功能**: 上传音频 + 转写 + 生成纪要，一次完成
-
-**参数**:
-```json
-{
-  "audio_files": "文件对象（支持单个或多个）",
-  "language": "zh | en | zh-en | zh-dialect",
-  "hotword": "热词（空格分隔）",
-  "generate_summary": "true | false（是否生成会议纪要）",
-  "return_type": "json | file | both"
-}
-```
-
-**return_type 说明**:
-- `json`: 返回 JSON 格式的转写结果和下载链接
-- `file`: 直接返回 Word 文档（单文件）或 ZIP 压缩包（多文件）
-- `both`: 返回 JSON 格式，并在响应中包含文件的 base64 编码
-
-**示例**:
-```bash
-# 上传单个文件，返回 JSON
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "generate_summary=true" \
-  -F "return_type=json"
-
-# 上传多个文件，直接下载 ZIP
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@file1.mp3" \
-  -F "audio_files=@file2.mp3" \
-  -F "return_type=file" \
-  -o transcripts.zip
-```
-
 ### RESTful 文件资源接口
 
 #### GET `/api/voice/files`
@@ -338,7 +298,6 @@ curl -X PATCH "http://localhost:8998/api/voice/files/{file_id}" \
 **功能**: 删除文件和相关数据
 
 **特殊操作**:
-- `file_id = "_clear_dify"`: 清空Dify生成文件（删除所有 `transcripts_*.zip` 文件及其对应的音频文件）
 - `file_id = "_clear_all"`: 清空所有历史记录（删除所有转写文件、音频文件和历史记录）
 
 **示例**:
@@ -346,23 +305,19 @@ curl -X PATCH "http://localhost:8998/api/voice/files/{file_id}" \
 # 删除单个文件
 curl -X DELETE "http://localhost:8998/api/voice/files/{file_id}"
 
-# 清空Dify生成文件
-curl -X DELETE "http://localhost:8998/api/voice/files/_clear_dify"
-
 # 清空所有历史记录
 curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
 ```
 
-**响应示例（清空操作）**:
+**响应示例（清空所有历史记录）**:
 ```json
 {
   "success": true,
-  "message": "清空dify生成文件成功",
+  "message": "清空所有历史记录成功",
   "deleted": {
-    "zip_files": 3,
-    "audio_files": 3,
-    "transcript_files": 3,
-    "records": 3
+    "audio_files": 10,
+    "transcript_files": 10,
+    "records": 10
   }
 }
 ```
@@ -377,8 +332,8 @@ curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
 
 | 方法 | 端点 | 功能 | 推荐新接口 |
 |------|------|------|-----------|
-| POST | `/api/voice/upload` | 上传音频文件 | `/api/voice/transcribe_all` |
-| POST | `/api/voice/transcribe` | 开始转写 | `/api/voice/transcribe_all` |
+| POST | `/api/voice/upload` | 上传音频文件 | `/api/voice/transcribe` |
+| POST | `/api/voice/transcribe` | 开始转写 | - |
 | GET | `/api/voice/status/{file_id}` | 获取转写状态 | `/api/voice/files/{file_id}` |
 | GET | `/api/voice/result/{file_id}` | 获取转写结果 | `/api/voice/files/{file_id}?include_transcript=true` |
 | POST | `/api/voice/stop/{file_id}` | 停止转写 | - |
@@ -451,31 +406,44 @@ ws.send(JSON.stringify({
 #### 场景1：快速转写单个文件
 
 ```bash
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "return_type=json"
+# 1. 上传文件
+FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting.mp3" | jq -r '.file.id')
+
+# 2. 开始转写（wait=true 等待完成）
+curl -X POST "http://localhost:8998/api/voice/transcribe" \
+  -H "Content-Type: application/json" \
+  -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"wait\": true}"
 ```
 
 #### 场景2：批量转写多个文件
 
 ```bash
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@file1.mp3" \
-  -F "audio_files=@file2.mp3" \
-  -F "audio_files=@file3.mp3" \
-  -F "return_type=file" \
-  -o transcripts.zip
+# 循环处理多个文件
+for file in file1.mp3 file2.mp3 file3.mp3; do
+  FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+    -F "audio_file=@$file" | jq -r '.file.id')
+  
+  curl -X POST "http://localhost:8998/api/voice/transcribe" \
+    -H "Content-Type: application/json" \
+    -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"wait\": true}"
+done
 ```
 
 #### 场景3：转写并生成会议纪要
 
 ```bash
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "generate_summary=true" \
-  -F "hotword=季度报告 销售业绩 市场策略" \
+# 1. 上传文件
+FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting.mp3" | jq -r '.file.id')
+
+# 2. 开始转写（带热词）
+curl -X POST "http://localhost:8998/api/voice/transcribe" \
+  -H "Content-Type: application/json" \
+  -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"hotword\": \"季度报告 销售业绩 市场策略\", \"wait\": true}"
+
+# 3. 生成会议纪要
+curl -X POST "http://localhost:8998/api/voice/generate_summary/$FILE_ID" \
   -F "return_type=both"
 ```
 
@@ -507,25 +475,57 @@ curl "http://localhost:8998/api/voice/download_transcript/$FILE_ID" \
 
 ```python
 import requests
+import time
 
-# 一站式转写
-def transcribe_audio(audio_path, language='zh', generate_summary=False):
-    url = 'http://localhost:8998/api/voice/transcribe_all'
+# 转写音频文件
+def transcribe_audio(audio_path, language='zh', wait=True):
+    base_url = 'http://localhost:8998/api/voice'
     
-    files = {'audio_files': open(audio_path, 'rb')}
-    data = {
+    # 1. 上传文件
+    with open(audio_path, 'rb') as f:
+        files = {'audio_file': f}
+        response = requests.post(f'{base_url}/upload', files=files)
+        upload_result = response.json()
+        
+        if not upload_result.get('success'):
+            raise Exception(f"上传失败: {upload_result.get('message')}")
+        
+        file_id = upload_result['file']['id']
+    
+    # 2. 开始转写（wait=True 等待完成）
+    transcribe_data = {
+        'file_id': file_id,
         'language': language,
-        'generate_summary': generate_summary,
-        'return_type': 'json'
+        'wait': wait
     }
+    response = requests.post(f'{base_url}/transcribe', json=transcribe_data)
+    result = response.json()
     
-    response = requests.post(url, files=files, data=data)
-    return response.json()
+    if result.get('success') and result.get('status') == 'completed':
+        return result
+    
+    # 如果 wait=False，需要轮询状态
+    if not wait:
+        while True:
+            response = requests.get(f'{base_url}/files/{file_id}')
+            status_result = response.json()
+            status = status_result['file']['status']
+            
+            if status == 'completed':
+                # 获取转写结果
+                response = requests.get(f'{base_url}/result/{file_id}')
+                return response.json()
+            elif status == 'error':
+                raise Exception("转写失败")
+            
+            time.sleep(2)  # 等待2秒后重试
+    
+    return result
 
 # 使用
-result = transcribe_audio('meeting.mp3', generate_summary=True)
-print(f"转写完成: {result['message']}")
-print(f"说话人数: {result['results'][0]['statistics']['speakers_count']}")
+result = transcribe_audio('meeting.mp3', wait=True)
+if result.get('transcript'):
+    print(f"转写完成，共 {len(result['transcript'])} 段")
 ```
 
 ## ⚙️ 配置说明
@@ -711,6 +711,23 @@ export OPENAI_API_KEY="your-api-key"
 
 ## 📝 更新日志
 
+### v3.1.3-FunASR (2025-12-04)
+
+**API简化与优化**
+
+#### 接口变更
+- ✅ **删除一站式转写接口**：移除 `POST /api/voice/transcribe_all` 接口，统一使用普通转写接口
+- ✅ **删除清空Dify生成文件功能**：移除 `DELETE /api/voice/files/_clear_dify` 特殊操作
+- ✅ **增强普通转写接口**：优化 `POST /api/voice/transcribe` 接口
+  - 当 `wait=true` 时，返回结果包含 `status` 字段和 `transcript` 字段
+  - `transcript` 中不包含 `words` 字段，只保留基本转写信息（speaker, text, start_time, end_time）
+  - 单个文件时，顶层直接返回 `transcript`，方便 Dify 等工具使用
+
+#### 技术改进
+- ✅ 简化了API接口结构，统一使用RESTful风格
+- ✅ 优化了转写接口的返回结构，更适合工作流工具集成
+- ✅ 清理了代码中的冗余功能，提高代码可维护性
+
 ### v3.1.2-FunASR (2025-11-25)
 
 **功能增强**
@@ -745,7 +762,6 @@ export OPENAI_API_KEY="your-api-key"
 
 #### 新增功能
 - ✅ **真正的停止转写功能**：支持中断正在进行的转写任务，通过 `_cancelled` 标志和 `InterruptedError` 机制实现
-- ✅ **清空Dify生成文件**：新增 `DELETE /api/voice/files/_clear_dify` 接口，可精确删除Dify一站式转写生成的.zip文件及其对应的音频文件
 - ✅ **清空所有历史记录**：新增 `DELETE /api/voice/files/_clear_all` 接口，可一键清空所有转写历史记录
 
 #### 功能修复
@@ -778,7 +794,6 @@ export OPENAI_API_KEY="your-api-key"
 - ✅ 提高代码可维护性和扩展性
 
 #### 新增功能
-- ✅ 一站式转写接口 `/api/voice/transcribe_all`
 - ✅ RESTful 风格文件资源接口
 - ✅ 支持批量文件处理
 - ✅ 支持三种返回模式（json/file/both）

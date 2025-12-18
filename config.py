@@ -8,7 +8,8 @@
 FILE_CONFIG = {
     "output_dir": "transcripts",  # 保存最终文本稿的目录
     "temp_dir": "audio_temp",  # 存放临时音频文件的目录
-    "upload_dir": "uploads"  # 存放上传文件的目录
+    "upload_dir": "uploads",  # 存放上传文件的目录
+    "summary_dir": "meeting_summaries"  # 保存会议纪要的目录
 }
 
 # 2. 模型配置
@@ -107,4 +108,40 @@ CONCURRENCY_CONFIG = {
         "requests_per_hour": 240    # 每小时最大请求数（配合12并发）
     }
 }
+
+# 6. Dify Webhook 配置
+DIFY_CONFIG = {
+    "api_key": "app-eXyiAwPX9etwCkmhYtUt4w4L",  # Dify API Key
+    "base_url": "http://192.168.7.105:5001",  # Dify API Base URL
+    # workflow_id: 留空则使用已发布的工作流版本，指定则使用特定版本的工作流 ID
+    # 注意：如果使用 workflow_id，必须是已发布版本的 ID，不能是草稿版本
+    "workflow_id": "",  # 留空使用已发布的工作流，或填入已发布版本的 workflow_id
+    "user_id": "3c076b8d-58b2-4d61-b225-f74b8c888945"  # Dify 用户 ID
+}
+
+# 7. AI模型API配置（用于生成会议纪要）
+# 支持多个模型：DeepSeek、Qwen、GLM
+AI_MODEL_CONFIG = {
+    "deepseek": {
+        "api_key": "sk-93c138f76a464e108673f090cb1e1ea3",
+        "api_base": "https://api.deepseek.com",
+        "model": "deepseek-chat",
+        "display_name": "Deepseek"
+    },
+    "qwen": {
+        "api_key": "sk-ee1d74cdd2a84f41b69a58e852f9b2ee",
+        "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # Qwen API Base URL
+        "model": "qwen-turbo",
+        "display_name": "Qwen"
+    },
+    "glm": {
+        "api_key": "3c0f2d5fd93a4ee7baab0c9ac81f4dff.eDXaACp7p5Fe6CWA",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",  # GLM API Base URL
+        "model": "glm-4",
+        "display_name": "GLM"
+    }
+}
+
+# 向后兼容：保留 DEEPSEEK_CONFIG
+DEEPSEEK_CONFIG = AI_MODEL_CONFIG["deepseek"]
 

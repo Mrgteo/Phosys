@@ -1,0 +1,993 @@
+Workflow 应用 API
+Workflow 应用无会话支持，适合用于翻译/文章写作/总结 AI 等等。
+
+Base URL
+Code
+http://localhost/v1
+
+Copy
+Copied!
+Authentication
+Service API 使用 API-Key 进行鉴权。 强烈建议开发者把 API-Key 放在后端存储，而非分享或者放在客户端存储，以免 API-Key 泄露，导致财产损失。 所有 API 请求都应在 Authorization HTTP Header 中包含您的 API-Key，如下所示：
+
+Code
+Authorization: Bearer {API_KEY}
+
+Copy
+Copied!
+POST
+/workflows/run
+执行 Workflow
+执行 workflow，没有已发布的 workflow，不可执行。
+
+Request Body
+inputs (object) Required 允许传入 App 定义的各变量值。 inputs 参数包含了多组键值对（Key/Value pairs），每组的键对应一个特定变量，每组的值则是该变量的具体值。变量可以是文件列表类型。 文件列表类型变量适用于传入文件结合文本理解并回答问题，仅当模型支持该类型文件解析能力时可用。如果该变量是文件列表类型，该变量对应的值应是列表格式，其中每个元素应包含以下内容：
+type (string) 支持类型：
+document 具体类型包含：'TXT', 'MD', 'MARKDOWN', 'PDF', 'HTML', 'XLSX', 'XLS', 'DOCX', 'CSV', 'EML', 'MSG', 'PPTX', 'PPT', 'XML', 'EPUB'
+image 具体类型包含：'JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'SVG'
+audio 具体类型包含：'MP3', 'M4A', 'WAV', 'WEBM', 'AMR'
+video 具体类型包含：'MP4', 'MOV', 'MPEG', 'MPGA'
+custom 具体类型包含：其他文件类型
+transfer_method (string) 传递方式，remote_url 图片地址 / local_file 上传文件
+url (string) 图片地址（仅当传递方式为 remote_url 时）
+upload_file_id (string) 上传文件 ID（仅当传递方式为 local_file 时）
+response_mode (string) Required 返回响应模式，支持：
+streaming 流式模式（推荐）。基于 SSE（Server-Sent Events）实现类似打字机输出方式的流式返回。
+blocking 阻塞模式，等待执行完毕后返回结果。（请求若流程较长可能会被中断）。 由于 Cloudflare 限制，请求会在 100 秒超时无返回后中断。
+user (string) Required 用户标识，用于定义终端用户的身份，方便检索、统计。 由开发者定义规则，需保证用户标识在应用内唯一。API 无法访问 WebApp 创建的会话。
+files (array[object]) 可选
+trace_id (string) Optional 链路追踪ID。适用于与业务系统已有的trace组件打通，实现端到端分布式追踪等场景。如果未指定，系统将自动生成 trace_id。支持以下三种方式传递，具体优先级依次为：
+Header：推荐通过 HTTP Header X-Trace-Id 传递，优先级最高。
+Query 参数：通过 URL 查询参数 trace_id 传递。
+Request Body：通过请求体字段 trace_id 传递（即本字段）。
+Response
+当 response_mode 为 blocking 时，返回 CompletionResponse object。 当 response_mode 为 streaming时，返回 ChunkCompletionResponse object 流式序列。
+
+CompletionResponse
+返回完整的 App 结果，Content-Type 为 application/json 。
+
+workflow_run_id (string) workflow 执行 ID
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+data (object) 详细内容
+id (string) workflow 执行 ID
+workflow_id (string) 关联 Workflow ID
+status (string) 执行状态, running / succeeded / failed / stopped
+outputs (json) Optional 输出内容
+error (string) Optional 错误原因
+elapsed_time (float) Optional 耗时(s)
+total_tokens (int) Optional 总使用 tokens
+total_steps (int) 总步数（冗余），默认 0
+created_at (timestamp) 开始时间
+finished_at (timestamp) 结束时间
+ChunkCompletionResponse
+返回 App 输出的流式块，Content-Type 为 text/event-stream。 每个流式块均为 data: 开头，块之间以 \n\n 即两个换行符分隔，如下所示：
+
+data: {"event": "text_chunk", "workflow_run_id": "b85e5fc5-751b-454d-b14e-dc5f240b0a31", "task_id": "bd029338-b068-4d34-a331-fc85478922c2", "data": {"text": "\u4e3a\u4e86", "from_variable_selector": ["1745912968134", "text"]}}\n\n
+
+Copy
+Copied!
+流式块中根据 event 不同，结构也不同，包含以下类型：
+
+event: workflow_started workflow 开始执行
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 workflow_started
+data (object) 详细内容
+id (string) workflow 执行 ID
+workflow_id (string) 关联 Workflow ID
+created_at (timestamp) 开始时间
+event: node_started node 开始执行
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 node_started
+data (object) 详细内容
+id (string) workflow 执行 ID
+node_id (string) 节点 ID
+node_type (string) 节点类型
+title (string) 节点名称
+index (int) 执行序号，用于展示 Tracing Node 顺序
+predecessor_node_id (string) 前置节点 ID，用于画布展示执行路径
+inputs (object) 节点中所有使用到的前置节点变量内容
+created_at (timestamp) 开始时间
+event: text_chunk 文本片段
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 text_chunk
+data (object) 详细内容
+text (string) 文本内容
+from_variable_selector (array) 文本来源路径，帮助开发者了解文本是由哪个节点的哪个变量生成的
+event: node_finished node 执行结束，成功失败同一事件中不同状态
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 node_finished
+data (object) 详细内容
+id (string) node 执行 ID
+node_id (string) 节点 ID
+index (int) 执行序号，用于展示 Tracing Node 顺序
+predecessor_node_id (string) optional 前置节点 ID，用于画布展示执行路径
+inputs (object) 节点中所有使用到的前置节点变量内容
+process_data (json) Optional 节点过程数据
+outputs (json) Optional 输出内容
+status (string) 执行状态 running / succeeded / failed / stopped
+error (string) Optional 错误原因
+elapsed_time (float) Optional 耗时(s)
+execution_metadata (json) 元数据
+total_tokens (int) optional 总使用 tokens
+total_price (decimal) optional 总费用
+currency (string) optional 货币，如 USD / RMB
+created_at (timestamp) 开始时间
+event: workflow_finished workflow 执行结束，成功失败同一事件中不同状态
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 workflow_finished
+data (object) 详细内容
+id (string) workflow 执行 ID
+workflow_id (string) 关联 Workflow ID
+status (string) 执行状态 running / succeeded / failed / stopped
+outputs (json) Optional 输出内容
+error (string) Optional 错误原因
+elapsed_time (float) Optional 耗时(s)
+total_tokens (int) Optional 总使用 tokens
+total_steps (int) 总步数（冗余），默认 0
+created_at (timestamp) 开始时间
+finished_at (timestamp) 结束时间
+event: tts_message TTS 音频流事件，即：语音合成输出。内容是Mp3格式的音频块，使用 base64 编码后的字符串，播放的时候直接解码即可。(开启自动播放才有此消息)
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+message_id (string) 消息唯一 ID
+audio (string) 语音合成之后的音频块使用 Base64 编码之后的文本内容，播放的时候直接 base64 解码送入播放器即可
+created_at (int) 创建时间戳，如：1705395332
+event: tts_message_end TTS 音频流结束事件，收到这个事件表示音频流返回结束。
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+message_id (string) 消息唯一 ID
+audio (string) 结束事件是没有音频的，所以这里是空字符串
+created_at (int) 创建时间戳，如：1705395332
+event: ping 每 10s 一次的 ping 事件，保持连接存活。
+Errors
+400，invalid_param，传入参数异常
+400，app_unavailable，App 配置不可用
+400，provider_not_initialize，无可用模型凭据配置
+400，provider_quota_exceeded，模型调用额度不足
+400，model_currently_not_support，当前模型不可用
+400，workflow_request_error，workflow 执行失败
+500，服务内部异常
+Request
+POST
+/workflows/run
+curl -X POST 'http://localhost/v1/workflows/run' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "inputs": {},
+  "response_mode": "streaming",
+  "user": "abc-123"
+}'
+
+Copy
+Copied!
+Example: file array as an input variable
+{
+  "inputs": {
+    "{variable_name}":
+    [
+      {
+      "transfer_method": "local_file",
+      "upload_file_id": "{upload_file_id}",
+      "type": "{document_type}"
+      }
+    ]
+  }
+}
+
+Copy
+Copied!
+Blocking Mode
+Response
+{
+    "workflow_run_id": "djflajgkldjgd",
+    "task_id": "9da23599-e713-473b-982c-4328d4f5c78a",
+    "data": {
+        "id": "fdlsjfjejkghjda",
+        "workflow_id": "fldjaslkfjlsda",
+        "status": "succeeded",
+        "outputs": {
+          "text": "Nice to meet you."
+        },
+        "error": null,
+        "elapsed_time": 0.875,
+        "total_tokens": 3562,
+        "total_steps": 8,
+        "created_at": 1705407629,
+        "finished_at": 1727807631
+    }
+}
+
+Copy
+Copied!
+Streaming Mode
+Response
+  data: {"event": "workflow_started", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "workflow_id": "dfjasklfjdslag", "created_at": 1679586595}}
+  data: {"event": "node_started", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "node_id": "dfjasklfjdslag", "node_type": "start", "title": "Start", "index": 0, "predecessor_node_id": "fdljewklfklgejlglsd", "inputs": {}, "created_at": 1679586595}}
+  data: {"event": "node_finished", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "node_id": "dfjasklfjdslag", "node_type": "start", "title": "Start", "index": 0, "predecessor_node_id": "fdljewklfklgejlglsd", "inputs": {}, "outputs": {}, "status": "succeeded", "elapsed_time": 0.324, "execution_metadata": {"total_tokens": 63127864, "total_price": 2.378, "currency": "USD"},  "created_at": 1679586595}}
+  data: {"event": "workflow_finished", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "workflow_id": "dfjasklfjdslag", "outputs": {}, "status": "succeeded", "elapsed_time": 0.324, "total_tokens": 63127864, "total_steps": "1", "created_at": 1679586595, "finished_at": 1679976595}}
+  data: {"event": "tts_message", "conversation_id": "23dd85f3-1a41-4ea0-b7a9-062734ccfaf9", "message_id": "a8bdc41c-13b2-4c18-bfd9-054b9803038c", "created_at": 1721205487, "task_id": "3bf8a0bb-e73b-4690-9e66-4e429bad8ee7", "audio": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"}
+  data: {"event": "tts_message_end", "conversation_id": "23dd85f3-1a41-4ea0-b7a9-062734ccfaf9", "message_id": "a8bdc41c-13b2-4c18-bfd9-054b9803038c", "created_at": 1721205487, "task_id": "3bf8a0bb-e73b-4690-9e66-4e429bad8ee7", "audio": ""}
+
+Copy
+Copied!
+File upload sample code
+import requests
+import json
+
+def upload_file(file_path, user):
+    upload_url = "https://api.dify.ai/v1/files/upload"
+    headers = {
+        "Authorization": "Bearer app-xxxxxxxx",
+    }
+
+    try:
+        print("上传文件中...")
+        with open(file_path, 'rb') as file:
+            files = {
+                'file': (file_path, file, 'text/plain')  # 确保文件以适当的MIME类型上传
+            }
+            data = {
+                "user": user,
+                "type": "TXT"  # 设置文件类型为TXT
+            }
+
+            response = requests.post(upload_url, headers=headers, files=files, data=data)
+            if response.status_code == 201:  # 201 表示创建成功
+                print("文件上传成功")
+                return response.json().get("id")  # 获取上传的文件 ID
+            else:
+                print(f"文件上传失败，状态码: {response.status_code}")
+                return None
+    except Exception as e:
+        print(f"发生错误: {str(e)}")
+        return None
+
+def run_workflow(file_id, user, response_mode="blocking"):
+    workflow_url = "https://api.dify.ai/v1/workflows/run"
+    headers = {
+        "Authorization": "Bearer app-xxxxxxxxx",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "inputs": {
+            "orig_mail": [{
+                "transfer_method": "local_file",
+                "upload_file_id": file_id,
+                "type": "document"
+            }]
+        },
+        "response_mode": response_mode,
+        "user": user
+    }
+
+    try:
+        print("运行工作流...")
+        response = requests.post(workflow_url, headers=headers, json=data)
+        if response.status_code == 200:
+            print("工作流执行成功")
+            return response.json()
+        else:
+            print(f"工作流执行失败，状态码: {response.status_code}")
+            return {"status": "error", "message": f"Failed to execute workflow, status code: {response.status_code}"}
+    except Exception as e:
+        print(f"发生错误: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+# 使用示例
+file_path = "{your_file_path}"
+user = "difyuser"
+
+# 上传文件
+file_id = upload_file(file_path, user)
+if file_id:
+    # 文件上传成功，继续运行工作流
+    result = run_workflow(file_id, user)
+    print(result)
+else:
+    print("文件上传失败，无法执行工作流")
+
+Copy
+Copied!
+POST
+/workflows/:workflow_id/run
+执行指定版本 Workflow
+执行指定版本的工作流，通过路径参数指定工作流ID。
+
+Path
+workflow_id (string) Required 工作流ID，用于指定特定版本的工作流
+
+获取方式：可以在版本历史中查询特定版本的工作流ID。
+
+Request Body
+inputs (object) Required 允许传入 App 定义的各变量值。 inputs 参数包含了多组键值对（Key/Value pairs），每组的键对应一个特定变量，每组的值则是该变量的具体值。变量可以是文件列表类型。 文件列表类型变量适用于传入文件结合文本理解并回答问题，仅当模型支持该类型文件解析能力时可用。如果该变量是文件列表类型，该变量对应的值应是列表格式，其中每个元素应包含以下内容：
+
+type (string) 支持类型：
+document 具体类型包含：'TXT', 'MD', 'MARKDOWN', 'MDX', 'PDF', 'HTML', 'XLSX', 'XLS', 'VTT', 'PROPERTIES', 'DOC', 'DOCX', 'CSV', 'EML', 'MSG', 'PPTX', 'PPT', 'XML', 'EPUB'
+image 具体类型包含：'JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'SVG'
+audio 具体类型包含：'MP3', 'M4A', 'WAV', 'WEBM', 'MPGA'
+video 具体类型包含：'MP4', 'MOV', 'MPEG', 'WEBM'
+custom 具体类型包含：其他文件类型
+transfer_method (string) 传递方式:
+remote_url: 文件地址。
+local_file: 上传文件。
+url 文件地址。（仅当传递方式为 remote_url 时）。
+upload_file_id 上传文件 ID。（仅当传递方式为 local_file 时）。
+response_mode (string) Required 返回响应模式，支持：
+
+streaming 流式模式（推荐）。基于 SSE（Server-Sent Events）实现类似打字机输出方式的流式返回。
+blocking 阻塞模式，等待执行完毕后返回结果。（请求若流程较长可能会被中断）。 由于 Cloudflare 限制，请求会在 100 秒超时无返回后中断。
+user (string) Required 用户标识，用于定义终端用户的身份，方便检索、统计。 由开发者定义规则，需保证用户标识在应用内唯一。API 无法访问 WebApp 创建的会话。
+
+files (array[object]) 可选
+
+trace_id (string) Optional 链路追踪ID。适用于与业务系统已有的trace组件打通，实现端到端分布式追踪等场景。如果未指定，系统将自动生成 trace_id。支持以下三种方式传递，具体优先级依次为：
+
+Header：推荐通过 HTTP Header X-Trace-Id 传递，优先级最高。
+Query 参数：通过 URL 查询参数 trace_id 传递。
+Request Body：通过请求体字段 trace_id 传递（即本字段）。
+Response
+当 response_mode 为 blocking 时，返回 CompletionResponse object。 当 response_mode 为 streaming时，返回 ChunkCompletionResponse object 流式序列。
+
+CompletionResponse
+返回完整的 App 结果，Content-Type 为 application/json 。
+
+workflow_run_id (string) workflow 执行 ID
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+data (object) 详细内容
+id (string) workflow 执行 ID
+workflow_id (string) 关联 Workflow ID
+status (string) 执行状态, running / succeeded / failed / stopped
+outputs (json) Optional 输出内容
+error (string) Optional 错误原因
+elapsed_time (float) Optional 耗时(s)
+total_tokens (int) Optional 总使用 tokens
+total_steps (int) 总步数（冗余），默认 0
+created_at (timestamp) 开始时间
+finished_at (timestamp) 结束时间
+ChunkCompletionResponse
+返回 App 输出的流式块，Content-Type 为 text/event-stream。 每个流式块均为 data: 开头，块之间以 \n\n 即两个换行符分隔，如下所示：
+
+data: {"event": "text_chunk", "workflow_run_id": "b85e5fc5-751b-454d-b14e-dc5f240b0a31", "task_id": "bd029338-b068-4d34-a331-fc85478922c2", "data": {"text": "\u4e3a\u4e86", "from_variable_selector": ["1745912968134", "text"]}}\n\n
+
+Copy
+Copied!
+流式块中根据 event 不同，结构也不同，包含以下类型：
+
+event: workflow_started workflow 开始执行
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 workflow_started
+data (object) 详细内容
+id (string) workflow 执行 ID
+workflow_id (string) 关联 Workflow ID
+created_at (timestamp) 开始时间
+event: node_started node 开始执行
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 node_started
+data (object) 详细内容
+id (string) workflow 执行 ID
+node_id (string) 节点 ID
+node_type (string) 节点类型
+title (string) 节点名称
+index (int) 执行序号，用于展示 Tracing Node 顺序
+predecessor_node_id (string) 前置节点 ID，用于画布展示执行路径
+inputs (object) 节点中所有使用到的前置节点变量内容
+created_at (timestamp) 开始时间
+event: text_chunk 文本片段
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 text_chunk
+data (object) 详细内容
+text (string) 文本内容
+from_variable_selector (array) 文本来源路径，帮助开发者了解文本是由哪个节点的哪个变量生成的
+event: node_finished node 执行结束，成功失败同一事件中不同状态
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 node_finished
+data (object) 详细内容
+id (string) node 执行 ID
+node_id (string) 节点 ID
+index (int) 执行序号，用于展示 Tracing Node 顺序
+predecessor_node_id (string) optional 前置节点 ID，用于画布展示执行路径
+inputs (object) 节点中所有使用到的前置节点变量内容
+process_data (json) Optional 节点过程数据
+outputs (json) Optional 输出内容
+status (string) 执行状态 running / succeeded / failed / stopped
+error (string) Optional 错误原因
+elapsed_time (float) Optional 耗时(s)
+execution_metadata (json) 元数据
+total_tokens (int) optional 总使用 tokens
+total_price (decimal) optional 总费用
+currency (string) optional 货币，如 USD / RMB
+created_at (timestamp) 开始时间
+event: workflow_finished workflow 执行结束，成功失败同一事件中不同状态
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+workflow_run_id (string) workflow 执行 ID
+event (string) 固定为 workflow_finished
+data (object) 详细内容
+id (string) workflow 执行 ID
+workflow_id (string) 关联 Workflow ID
+status (string) 执行状态 running / succeeded / failed / stopped
+outputs (json) Optional 输出内容
+error (string) Optional 错误原因
+elapsed_time (float) Optional 耗时(s)
+total_tokens (int) Optional 总使用 tokens
+total_steps (int) 总步数（冗余），默认 0
+created_at (timestamp) 开始时间
+finished_at (timestamp) 结束时间
+event: tts_message TTS 音频流事件，即：语音合成输出。内容是Mp3格式的音频块，使用 base64 编码后的字符串，播放的时候直接解码即可。(开启自动播放才有此消息)
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+message_id (string) 消息唯一 ID
+audio (string) 语音合成之后的音频块使用 Base64 编码之后的文本内容，播放的时候直接 base64 解码送入播放器即可
+created_at (int) 创建时间戳，如：1705395332
+event: tts_message_end TTS 音频流结束事件，收到这个事件表示音频流返回结束。
+task_id (string) 任务 ID，用于请求跟踪和下方的停止响应接口
+message_id (string) 消息唯一 ID
+audio (string) 结束事件是没有音频的，所以这里是空字符串
+created_at (int) 创建时间戳，如：1705395332
+event: ping 每 10s 一次的 ping 事件，保持连接存活。
+Errors
+400，invalid_param，传入参数异常
+400，app_unavailable，App 配置不可用
+400，provider_not_initialize，无可用模型凭据配置
+400，provider_quota_exceeded，模型调用额度不足
+400，model_currently_not_support，当前模型不可用
+400，workflow_not_found，指定的工作流版本未找到
+400，draft_workflow_error，无法使用草稿工作流版本
+400，workflow_id_format_error，工作流ID格式错误，需要UUID格式
+400，workflow_request_error，workflow 执行失败
+500，服务内部异常
+Request
+POST
+/workflows/:workflow_id/run
+curl -X POST 'http://localhost/v1/workflows/{workflow_id}/run' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "inputs": {},
+  "response_mode": "streaming",
+  "user": "abc-123"
+}'
+
+Copy
+Copied!
+Example: file array as an input variable
+{
+  "inputs": {
+    "{variable_name}":
+    [
+      {
+      "transfer_method": "local_file",
+      "upload_file_id": "{upload_file_id}",
+      "type": "{document_type}"
+      }
+    ]
+  }
+}
+
+Copy
+Copied!
+Blocking Mode
+Response
+{
+    "workflow_run_id": "djflajgkldjgd",
+    "task_id": "9da23599-e713-473b-982c-4328d4f5c78a",
+    "data": {
+        "id": "fdlsjfjejkghjda",
+        "workflow_id": "fldjaslkfjlsda",
+        "status": "succeeded",
+        "outputs": {
+          "text": "Nice to meet you."
+        },
+        "error": null,
+        "elapsed_time": 0.875,
+        "total_tokens": 3562,
+        "total_steps": 8,
+        "created_at": 1705407629,
+        "finished_at": 1727807631
+    }
+}
+
+Copy
+Copied!
+Streaming Mode
+Response
+  data: {"event": "workflow_started", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "workflow_id": "dfjasklfjdslag", "created_at": 1679586595}}
+  data: {"event": "node_started", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "node_id": "dfjasklfjdslag", "node_type": "start", "title": "Start", "index": 0, "predecessor_node_id": "fdljewklfklgejlglsd", "inputs": {}, "created_at": 1679586595}}
+  data: {"event": "node_finished", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "node_id": "dfjasklfjdslag", "node_type": "start", "title": "Start", "index": 0, "predecessor_node_id": "fdljewklfklgejlglsd", "inputs": {}, "outputs": {}, "status": "succeeded", "elapsed_time": 0.324, "execution_metadata": {"total_tokens": 63127864, "total_price": 2.378, "currency": "USD"},  "created_at": 1679586595}}
+  data: {"event": "workflow_finished", "task_id": "5ad4cb98-f0c7-4085-b384-88c403be6290", "workflow_run_id": "5ad498-f0c7-4085-b384-88cbe6290", "data": {"id": "5ad498-f0c7-4085-b384-88cbe6290", "workflow_id": "dfjasklfjdslag", "outputs": {}, "status": "succeeded", "elapsed_time": 0.324, "total_tokens": 63127864, "total_steps": "1", "created_at": 1679586595, "finished_at": 1679976595}}
+  data: {"event": "tts_message", "conversation_id": "23dd85f3-1a41-4ea0-b7a9-062734ccfaf9", "message_id": "a8bdc41c-13b2-4c18-bfd9-054b9803038c", "created_at": 1721205487, "task_id": "3bf8a0bb-e73b-4690-9e66-4e429bad8ee7", "audio": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"}
+  data: {"event": "tts_message_end", "conversation_id": "23dd85f3-1a41-4ea0-b7a9-062734ccfaf9", "message_id": "a8bdc41c-13b2-4c18-bfd9-054b9803038c", "created_at": 1721205487, "task_id": "3bf8a0bb-e73b-4690-9e66-4e429bad8ee7", "audio": ""}
+
+Copy
+Copied!
+GET
+/workflows/run/:workflow_run_id
+获取 Workflow 执行情况
+根据 workflow 执行 ID 获取 workflow 任务当前执行结果
+
+Path
+workflow_run_id (string) workflow 执行 ID，可在流式返回 Chunk 中获取
+Response
+id (string) workflow 执行 ID
+workflow_id (string) 关联的 Workflow ID
+status (string) 执行状态 running / succeeded / failed / stopped
+inputs (json) 任务输入内容
+outputs (json) 任务输出内容
+error (string) 错误原因
+total_steps (int) 任务执行总步数
+total_tokens (int) 任务执行总 tokens
+created_at (timestamp) 任务开始时间
+finished_at (timestamp) 任务结束时间
+elapsed_time (float) 耗时 (s)
+Request Example
+Request
+GET
+/workflows/run/:workflow_run_id
+curl -X GET 'http://localhost/v1/workflows/run/:workflow_run_id' \
+-H 'Authorization: Bearer {api_key}' \
+-H 'Content-Type: application/json'
+
+Copy
+Copied!
+Response Example
+Response
+{
+    "id": "b1ad3277-089e-42c6-9dff-6820d94fbc76",
+    "workflow_id": "19eff89f-ec03-4f75-b0fc-897e7effea02",
+    "status": "succeeded",
+    "inputs": "{\"sys.files\": [], \"sys.user_id\": \"abc-123\"}",
+    "outputs": null,
+    "error": null,
+    "total_steps": 3,
+    "total_tokens": 0,
+    "created_at": 1705407629,
+    "finished_at": 1727807631,
+    "elapsed_time": 30.098514399956912
+}
+
+Copy
+Copied!
+POST
+/workflows/tasks/:task_id/stop
+停止响应
+仅支持流式模式。
+
+Path
+task_id (string) 任务 ID，可在流式返回 Chunk 中获取
+Request Body
+user (string) Required 用户标识，用于定义终端用户的身份，必须和发送消息接口传入 user 保持一致。API 无法访问 WebApp 创建的会话。
+Response
+result (string) 固定返回 "success"
+Request Example
+Request
+POST
+/workflows/tasks/:task_id/stop
+curl -X POST 'http://localhost/v1/workflows/tasks/:task_id/stop' \
+-H 'Authorization: Bearer {api_key}' \
+-H 'Content-Type: application/json' \
+--data-raw '{"user": "abc-123"}'
+
+Copy
+Copied!
+Response Example
+Response
+{
+  "result": "success"
+}
+
+Copy
+Copied!
+POST
+/files/upload
+上传文件
+上传文件并在发送消息时使用，可实现图文多模态理解。 支持您的工作流程所支持的任何格式。 上传的文件仅供当前终端用户使用。
+
+Request Body
+该接口需使用 multipart/form-data 进行请求。
+
+Name
+file
+Type
+file
+Description
+要上传的文件。
+
+Name
+user
+Type
+string
+Description
+用户标识，用于定义终端用户的身份，必须和发送消息接口传入 user 保持一致。服务 API 不会共享 WebApp 创建的对话。
+
+Response
+成功上传后，服务器会返回文件的 ID 和相关信息。
+
+id (uuid) ID
+name (string) 文件名
+size (int) 文件大小（byte）
+extension (string) 文件后缀
+mime_type (string) 文件 mime-type
+created_by (uuid) 上传人 ID
+created_at (timestamp) 上传时间
+Errors
+400，no_file_uploaded，必须提供文件
+400，too_many_files，目前只接受一个文件
+400，unsupported_preview，该文件不支持预览
+400，unsupported_estimate，该文件不支持估算
+413，file_too_large，文件太大
+415，unsupported_file_type，不支持的扩展名，当前只接受文档类文件
+503，s3_connection_failed，无法连接到 S3 服务
+503，s3_permission_denied，无权限上传文件到 S3
+503，s3_file_too_large，文件超出 S3 大小限制
+Request
+POST
+/files/upload
+curl -X POST 'http://localhost/v1/files/upload' \
+--header 'Authorization: Bearer {api_key}' \
+--form 'file=@localfile;type=image/[png|jpeg|jpg|webp|gif]' \
+--form 'user=abc-123'
+
+Copy
+Copied!
+Response
+{
+  "id": "72fa9618-8f89-4a37-9b33-7e1178a24a67",
+  "name": "example.png",
+  "size": 1024,
+  "extension": "png",
+  "mime_type": "image/png",
+  "created_by": 123,
+  "created_at": 1577836800,
+}
+
+Copy
+Copied!
+GET
+/files/:file_id/preview
+文件预览
+预览或下载已上传的文件。此端点允许您访问先前通过文件上传 API 上传的文件。
+
+文件只能在属于请求应用程序的消息范围内访问。
+路径参数
+file_id (string) 必需 要预览的文件的唯一标识符，从文件上传 API 响应中获得。
+查询参数
+as_attachment (boolean) 可选 是否强制将文件作为附件下载。默认为 false（在浏览器中预览）。
+响应
+返回带有适当浏览器显示或下载标头的文件内容。
+
+Content-Type 根据文件 MIME 类型设置
+Content-Length 文件大小（以字节为单位，如果可用）
+Content-Disposition 如果 as_attachment=true 则设置为 "attachment"
+Cache-Control 用于性能的缓存标头
+Accept-Ranges 对于音频/视频文件设置为 "bytes"
+错误
+400, invalid_param, 参数输入异常
+403, file_access_denied, 文件访问被拒绝或文件不属于当前应用程序
+404, file_not_found, 文件未找到或已被删除
+500, 服务内部错误
+请求示例
+Request
+GET
+/files/:file_id/preview
+curl -X GET 'http://localhost/v1/files/72fa9618-8f89-4a37-9b33-7e1178a24a67/preview' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+作为附件下载
+Request
+GET
+/files/:file_id/preview?as_attachment=true
+curl -X GET 'http://localhost/v1/files/72fa9618-8f89-4a37-9b33-7e1178a24a67/preview?as_attachment=true' \
+--header 'Authorization: Bearer {api_key}' \
+--output downloaded_file.png
+
+Copy
+Copied!
+响应标头示例
+Response Headers
+Content-Type: image/png
+Content-Length: 1024
+Cache-Control: public, max-age=3600
+
+Copy
+Copied!
+文件下载响应标头
+Download Response Headers
+Content-Type: image/png
+Content-Length: 1024
+Content-Disposition: attachment; filename*=UTF-8''example.png
+Cache-Control: public, max-age=3600
+
+Copy
+Copied!
+GET
+/workflows/logs
+获取 Workflow 日志
+倒序返回 workflow 日志
+
+Query
+Name
+keyword
+Type
+string
+Description
+关键字
+
+Name
+status
+Type
+string
+Description
+执行状态 succeeded/failed/stopped
+
+Name
+page
+Type
+int
+Description
+当前页码, 默认1.
+
+Name
+limit
+Type
+int
+Description
+每页条数, 默认20.
+
+Name
+created_by_end_user_session_id
+Type
+str
+Description
+由哪个endUser创建，例如，abc-123.
+
+Name
+created_by_account
+Type
+str
+Description
+由哪个邮箱账户创建，例如，lizb@test.com.
+
+Response
+page (int) 当前页码
+limit (int) 每页条数
+total (int) 总条数
+has_more (bool) 是否还有更多数据
+data (array[object]) 当前页码的数据
+id (string) 标识
+workflow_run (object) Workflow 执行日志
+id (string) 标识
+version (string) 版本
+status (string) 执行状态，running / succeeded / failed / stopped
+error (string) (可选) 错误
+elapsed_time (float) 耗时，单位秒
+total_tokens (int) 消耗的 token 数量
+total_steps (int) 执行步骤长度
+created_at (timestamp) 开始时间
+finished_at (timestamp) 结束时间
+created_from (string) 来源
+created_by_role (string) 角色
+created_by_account (string) (可选) 帐号
+created_by_end_user (object) 用户
+id (string) 标识
+type (string) 类型
+is_anonymous (bool) 是否匿名
+session_id (string) 会话标识
+created_at (timestamp) 创建时间
+Request
+GET
+/workflows/logs
+curl -X GET 'http://localhost/v1/workflows/logs'\
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response Example
+Response
+{
+    "page": 1,
+    "limit": 1,
+    "total": 7,
+    "has_more": true,
+    "data": [
+        {
+            "id": "e41b93f1-7ca2-40fd-b3a8-999aeb499cc0",
+            "workflow_run": {
+                "id": "c0640fc8-03ef-4481-a96c-8a13b732a36e",
+                "version": "2024-08-01 12:17:09.771832",
+                "status": "succeeded",
+                "error": null,
+                "elapsed_time": 1.3588523610014818,
+                "total_tokens": 0,
+                "total_steps": 3,
+                "created_at": 1726139643,
+                "finished_at": 1726139644
+            },
+            "created_from": "service-api",
+            "created_by_role": "end_user",
+            "created_by_account": null,
+            "created_by_end_user": {
+                "id": "7f7d9117-dd9d-441d-8970-87e5e7e687a3",
+                "type": "service_api",
+                "is_anonymous": false,
+                "session_id": "abc-123"
+            },
+            "created_at": 1726139644
+        }
+    ]
+}
+
+Copy
+Copied!
+GET
+/info
+获取应用基本信息
+用于获取应用的基本信息
+
+Response
+name (string) 应用名称
+description (string) 应用描述
+tags (array[string]) 应用标签
+mode (string) 应用模式
+'author_name' (string) 作者名称
+Request
+GET
+/info
+curl -X GET 'http://localhost/v1/info' \
+-H 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "name": "My App",
+  "description": "This is my app.",
+  "tags": [
+    "tag1",
+    "tag2"
+  ],
+  "mode": "workflow",
+  "author_name": "Dify"
+}
+
+Copy
+Copied!
+GET
+/parameters
+获取应用参数
+用于进入页面一开始，获取功能开关、输入参数名称、类型及默认值等使用。
+
+Response
+user_input_form (array[object]) 用户输入表单配置
+text-input (object) 文本输入控件
+label (string) 控件展示标签名
+variable (string) 控件 ID
+required (bool) 是否必填
+default (string) 默认值
+paragraph (object) 段落文本输入控件
+label (string) 控件展示标签名
+variable (string) 控件 ID
+required (bool) 是否必填
+default (string) 默认值
+select (object) 下拉控件
+label (string) 控件展示标签名
+variable (string) 控件 ID
+required (bool) 是否必填
+default (string) 默认值
+options (array[string]) 选项值
+file_upload (object) 文件上传配置
+document (object) 文档设置 当前仅支持文档类型：txt, md, markdown, pdf, html, xlsx, xls, docx, csv, eml, msg, pptx, ppt, xml, epub。
+enabled (bool) 是否启用
+number_limits (int) 文档数量限制，默认为 3
+transfer_methods (array[string]) 传输方式列表：remote_url, local_file，必须选择一个。
+image (object) 图片设置 当前仅支持图片类型：png, jpg, jpeg, webp, gif。
+enabled (bool) 是否启用
+number_limits (int) 图片数量限制，默认为 3
+transfer_methods (array[string]) 传输方式列表：remote_url, local_file，必须选择一个。
+audio (object) 音频设置 当前仅支持音频类型：mp3, m4a, wav, webm, amr。
+enabled (bool) 是否启用
+number_limits (int) 音频数量限制，默认为 3
+transfer_methods (array[string]) 传输方式列表：remote_url, local_file，必须选择一个。
+video (object) 视频设置 当前仅支持视频类型：mp4, mov, mpeg, mpga。
+enabled (bool) 是否启用
+number_limits (int) 视频数量限制，默认为 3
+transfer_methods (array[string]) 传输方式列表：remote_url, local_file，必须选择一个。
+custom (object) 自定义设置
+enabled (bool) 是否启用
+number_limits (int) 自定义数量限制，默认为 3
+transfer_methods (array[string]) 传输方式列表：remote_url, local_file，必须选择一个。
+system_parameters (object) 系统参数
+file_size_limit (int) 文档上传大小限制 (MB)
+image_file_size_limit (int) 图片文件上传大小限制（MB）
+audio_file_size_limit (int) 音频文件上传大小限制 (MB)
+video_file_size_limit (int) 视频文件上传大小限制 (MB)
+Request
+GET
+/parameters
+ curl -X GET 'http://localhost/v1/parameters'
+
+Copy
+Copied!
+Response
+{
+  "user_input_form": [
+      {
+          "paragraph": {
+              "label": "Query",
+              "variable": "query",
+              "required": true,
+              "default": ""
+          }
+      }
+  ],
+  "file_upload": {
+      "image": {
+          "enabled": false,
+          "number_limits": 3,
+          "detail": "high",
+          "transfer_methods": [
+              "remote_url",
+              "local_file"
+          ]
+      }
+  },
+  "system_parameters": {
+      "file_size_limit": 15,
+      "image_file_size_limit": 10,
+      "audio_file_size_limit": 50,
+      "video_file_size_limit": 100
+  }
+}
+
+Copy
+Copied!
+GET
+/site
+获取应用 WebApp 设置
+用于获取应用的 WebApp 设置
+
+Response
+title (string) WebApp 名称
+icon_type (string) 图标类型，emoji-表情，image-图片
+icon (string) 图标，如果是 emoji 类型，则是 emoji 表情符号，如果是 image 类型，则是图片 URL
+icon_background (string) hex 格式的背景色
+icon_url (string) 图标 URL
+description (string) 描述
+copyright (string) 版权信息
+privacy_policy (string) 隐私政策链接
+custom_disclaimer (string) 自定义免责声明
+default_language (string) 默认语言
+show_workflow_steps (bool) 是否显示工作流详情
+Request
+POST
+/meta
+curl -X GET 'http://localhost/v1/site' \
+-H 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "title": "My App",
+  "icon_type": "emoji",
+  "icon": "😄",
+  "icon_background": "#FFEAD5",
+  "icon_url": null,
+  "description": "This is my app.",
+  "copyright": "all rights reserved",
+  "privacy_policy": "",
+  "custom_disclaimer": "All generated by AI",
+  "default_language": "en-US",
+  "show_workflow_steps": false,
+}
+
+Copy
+Copied!

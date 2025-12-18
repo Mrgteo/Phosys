@@ -21,6 +21,9 @@
                 <button id="download-transcript-btn" class="btn btn-primary">
                     <i class="fas fa-download"></i> 下载转写结果
                 </button>
+                <button id="generate-summary-btn" class="btn btn-primary">
+                    <i class="fas fa-file-alt"></i> 生成会议纪要
+                </button>
             </div>
         </div>
 
@@ -84,6 +87,82 @@
                 <input type="text" id="search-input" placeholder="输入关键词搜索..." autofocus>
                 <div id="search-results" class="search-results">
                     <p class="text-muted">输入关键词开始搜索</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 会议纪要生成设置窗口 -->
+    <div id="summary-settings-modal" class="modal summary-modal">
+        <div class="modal-content summary-modal-content">
+            <div class="summary-modal-body">
+                <!-- 左侧：设置区域 -->
+                <div class="summary-settings-left">
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <h3 class="settings-title">
+                                <i class="fas fa-edit"></i> 提示词模板设置
+                            </h3>
+                            <div class="model-select-wrapper">
+                                <label class="model-label">
+                                    <i class="fas fa-cog"></i> 模型选择：
+                                </label>
+                                <select id="summary-model-select" class="model-select">
+                                    <option value="deepseek">Deepseek</option>
+                                    <option value="qwen">Qwen</option>
+                                    <option value="glm">GLM</option>
+                                </select>
+                            </div>
+                        </div>
+                        <textarea id="summary-prompt-input" class="prompt-textarea" placeholder="请输入生成会议纪要的提示词模板...">请根据以下会议转录内容，生成一份结构化的会议纪要。
+
+会议转录内容：
+请严格按照以下格式生成会议纪要：
+
+会议主题：[根据会议内容总结主题]
+主持人：[从转录中识别主持人]
+参会人数：[统计参与会议的总人数]
+关键词：[会议纪要关键词]
+
+一、会议议题及讨论内容
+二、行动清单（待办事项）
+三、其他说明
+
+重要要求：
+1. 直接输出会议纪要内容，不要包含任何确认消息、引导语句或说明性文字
+2. 不要添加任何前缀说明，直接开始输出会议主题
+3. 关键词部分应提取会议中的核心专业术语、重要概念、关键议题等，用空格分隔，数量控制在10-20个之间</textarea>
+                    </div>
+                    
+                    <button id="start-generate-btn" class="btn-generate">
+                        <i class="fas fa-play"></i> 开始生成
+                    </button>
+                </div>
+                
+                <!-- 右侧：预览区域 -->
+                <div class="summary-preview-right">
+                    <div class="preview-header">
+                        <h3 class="preview-title">
+                            <i class="fas fa-eye"></i> 会议纪要预览
+                        </h3>
+                        <div class="preview-actions">
+                            <button id="download-summary-btn-modal" class="btn-download-summary">
+                                <i class="fas fa-download"></i> 下载会议纪要
+                            </button>
+                            <button id="delete-summary-btn-modal" class="btn-delete-summary">
+                                <i class="fas fa-trash"></i> 删除会议纪要
+                            </button>
+                        </div>
+                    </div>
+                    <div id="summary-preview-content" class="summary-preview-content">
+                        <div class="empty-preview">
+                            <i class="fas fa-file-alt"></i>
+                            <p>生成的会议纪要将显示在这里</p>
+                        </div>
+                    </div>
+                    <button id="exit-summary-modal-btn" class="btn-exit">
+                        <i class="fas fa-times"></i> 退出
+                    </button>
                 </div>
             </div>
         </div>

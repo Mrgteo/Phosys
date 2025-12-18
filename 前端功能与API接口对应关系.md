@@ -1,7 +1,7 @@
 # 前端功能与API接口对应关系详细文档
 
-> 版本: 3.1.2-FunASR  
-> 更新时间: 2025-11-25  
+> 版本: 3.1.3-FunASR  
+> 更新时间: 2025-12-04  
 > 说明: 本文档详细描述前端每个功能对应的API接口调用关系
 
 ---
@@ -726,29 +726,15 @@ async deleteFile(fileId) {
 |-----|------|
 | **接口** | `DELETE /api/voice/files/{file_id}` |
 | **请求方式** | DELETE |
-| **路径参数** | `file_id`: 文件唯一标识，支持特殊值：`_clear_dify`、`_clear_all` |
+| **路径参数** | `file_id`: 文件唯一标识，支持特殊值：`_clear_all` |
 | **删除内容** | 音频文件 + 转写结果 + 相关文档 |
-| **特殊操作** | `_clear_dify`（清空Dify生成文件）、`_clear_all`（清空所有历史记录） |
+| **特殊操作** | `_clear_all`（清空所有历史记录） |
 
 **响应示例（正常删除）**:
 ```json
 {
   "success": true,
   "message": "文件删除成功"
-}
-```
-
-**响应示例（清空Dify生成文件）**:
-```json
-{
-  "success": true,
-  "message": "清空dify生成文件成功",
-  "deleted": {
-    "zip_files": 3,
-    "audio_files": 3,
-    "transcript_files": 3,
-    "records": 3
-  }
 }
 ```
 
@@ -767,11 +753,6 @@ async deleteFile(fileId) {
 ```
 
 #### 7.5 清空功能
-
-**清空Dify生成文件** (`file_id = "_clear_dify"`):
-- 删除所有 `transcripts_*.zip` 文件
-- 删除对应的音频文件、转写文档和会议纪要
-- 从历史记录中移除相关记录
 
 **清空所有历史记录** (`file_id = "_clear_all"`):
 - 删除所有音频文件、转写文档和会议纪要
@@ -2047,6 +2028,23 @@ WebSocket推送 / HTTP响应
 
 ## 最新更新
 
+### v3.1.3-FunASR (2025-12-04)
+
+**API简化与优化**
+
+#### 接口变更
+- ✅ **删除一站式转写接口**：移除 `POST /api/voice/transcribe_all` 接口，统一使用普通转写接口
+- ✅ **删除清空Dify生成文件功能**：移除 `DELETE /api/voice/files/_clear_dify` 特殊操作和相关前端按钮
+- ✅ **增强普通转写接口**：优化 `POST /api/voice/transcribe` 接口
+  - 当 `wait=true` 时，返回结果包含 `status` 字段和 `transcript` 字段
+  - `transcript` 中不包含 `words` 字段，只保留基本转写信息
+  - 单个文件时，顶层直接返回 `transcript`，方便 Dify 等工具使用
+
+#### 技术改进
+- ✅ 简化了API接口结构，统一使用RESTful风格
+- ✅ 优化了转写接口的返回结构，更适合工作流工具集成
+- ✅ 清理了代码中的冗余功能，提高代码可维护性
+
 ### v3.1.2-FunASR (2025-11-25)
 
 **功能增强**
@@ -2081,7 +2079,6 @@ WebSocket推送 / HTTP响应
 
 #### 新增功能
 - ✅ **真正的停止转写功能**：现在可以真正中断转写任务，通过 `_cancelled` 标志和 `InterruptedError` 机制实现
-- ✅ **清空Dify生成文件**：新增清空Dify生成文件功能，可精确删除Dify一站式转写生成的.zip文件及其对应的音频文件
 - ✅ **清空所有历史记录**：新增一键清空所有历史记录功能
 
 #### 问题修复

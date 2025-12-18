@@ -1,7 +1,7 @@
 # 音频转写系统 API 接口文档
 
-> 版本: 3.1.2-FunASR  
-> 更新时间: 2025-11-25  
+> 版本: 3.1.3-FunASR  
+> 更新时间: 2025-12-04  
 > 基础URL: `http://localhost:8998`
 
 ---
@@ -14,7 +14,6 @@
 - [响应格式](#响应格式)
 - [错误处理](#错误处理)
 - [核心接口](#核心接口)
-  - [一站式转写接口](#一站式转写接口)
   - [RESTful文件资源接口](#restful文件资源接口)
   - [向后兼容接口](#向后兼容接口)
   - [下载接口](#下载接口)
@@ -123,290 +122,7 @@
 
 ## 核心接口
 
-### 一站式转写接口
-
-#### POST `/api/voice/transcribe_all`
-
-**功能**：上传音频文件、执行转写、生成会议纪要，一次完成所有操作。
-
-**请求方式**：`POST` (multipart/form-data)
-
-**请求参数**：
-
-| 参数名 | 类型 | 必填 | 默认值 | 说明 |
-|-------|------|-----|-------|------|
-| `audio_files` | File/File[] | 是 | - | 音频文件，支持单个或多个 |
-| `language` | string | 否 | `zh` | 语言类型：zh/en/zh-en/zh-dialect |
-| `hotword` | string | 否 | `""` | 热词，空格分隔，如"人工智能 深度学习" |
-| `generate_summary` | boolean | 否 | `false` | 是否生成会议纪要 |
-| `return_type` | string | 否 | `json` | 返回类型：json/file/both |
-
-**return_type说明**：
-
-- `json`：返回JSON格式的转写结果和下载链接
-- `file`：直接返回Word文档（单文件）或ZIP压缩包（多文件）
-- `both`：返回JSON格式，并在响应中包含文件的base64编码
-
-**响应示例 (return_type=json)**：
-
-```json
-{
-  "success": true,
-  "message": "处理完成: 成功 1, 失败 0",
-  "total_files": 1,
-  "success_count": 1,
-  "failed_count": 0,
-  "results": [
-    {
-      "success": true,
-      "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "filename": "meeting.mp3",
-      "file_info": {
-        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "filename": "meeting.mp3",
-        "upload_time": "2025-11-02 14:30:00",
-        "complete_time": "2025-11-02 14:35:00",
-        "size": 5242880,
-        "language": "zh"
-      },
-      "transcript": [
-        {
-          "speaker": "说话人1",
-          "text": "大家好，今天我们讨论项目进展。",
-          "start_time": 0.5,
-          "end_time": 3.2,
-          "words": [
-            {
-              "text": "大家",
-              "start": 0.5,
-              "end": 0.8
-            },
-            {
-              "text": "好",
-              "start": 0.8,
-              "end": 1.0
-            },
-            {
-              "text": "，",
-              "start": 1.0,
-              "end": 1.1
-            },
-            {
-              "text": "今天",
-              "start": 1.1,
-              "end": 1.4
-            },
-            {
-              "text": "我们",
-              "start": 1.4,
-              "end": 1.7
-            },
-            {
-              "text": "讨论",
-              "start": 1.7,
-              "end": 2.0
-            },
-            {
-              "text": "项目",
-              "start": 2.0,
-              "end": 2.3
-            },
-            {
-              "text": "进展",
-              "start": 2.3,
-              "end": 2.6
-            },
-            {
-              "text": "。",
-              "start": 2.6,
-              "end": 2.7
-            }
-          ]
-        },
-        {
-          "speaker": "说话人2",
-          "text": "好的，我先汇报一下我负责的部分。",
-          "start_time": 3.5,
-          "end_time": 6.8,
-          "words": [
-            {
-              "text": "好的",
-              "start": 3.5,
-              "end": 3.8
-            },
-            {
-              "text": "，",
-              "start": 3.8,
-              "end": 3.9
-            },
-            {
-              "text": "我",
-              "start": 3.9,
-              "end": 4.0
-            },
-            {
-              "text": "先",
-              "start": 4.0,
-              "end": 4.2
-            },
-            {
-              "text": "汇报",
-              "start": 4.2,
-              "end": 4.6
-            },
-            {
-              "text": "一下",
-              "start": 4.6,
-              "end": 4.9
-            },
-            {
-              "text": "我",
-              "start": 4.9,
-              "end": 5.0
-            },
-            {
-              "text": "负责",
-              "start": 5.0,
-              "end": 5.3
-            },
-            {
-              "text": "的",
-              "start": 5.3,
-              "end": 5.4
-            },
-            {
-              "text": "部分",
-              "start": 5.4,
-              "end": 5.7
-            },
-            {
-              "text": "。",
-              "start": 5.7,
-              "end": 5.8
-            }
-          ]
-        }
-      ],
-      "download_urls": {
-        "audio": "/api/voice/audio/a1b2c3d4-e5f6-7890-abcd-ef1234567890?download=1",
-        "transcript": "/api/voice/download_transcript/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "summary": "/api/voice/download_summary/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-      },
-      "statistics": {
-        "speakers_count": 2,
-        "segments_count": 25,
-        "total_duration": 180.5,
-        "total_characters": 1250,
-        "speakers": ["说话人1", "说话人2"]
-      },
-      "summary": {
-        "raw_text": "## 会议纪要\n\n会议主题：项目进展讨论...",
-        "generated_at": "2025-11-02 14:35:00",
-        "model": "deepseek-chat",
-        "status": "success"
-      }
-    }
-  ]
-}
-```
-
-**响应示例 (return_type=file)**：
-
-直接返回文件流：
-- 单文件：返回Word文档 (.docx)
-- 多文件：返回ZIP压缩包 (.zip)
-
-**响应示例 (return_type=both)**：
-
-```json
-{
-  "success": true,
-  "message": "处理完成: 成功 1, 失败 0",
-  "total_files": 1,
-  "success_count": 1,
-  "failed_count": 0,
-  "results": [ ... ],
-  "files": [
-    {
-      "filename": "transcript_20251102_143500.docx",
-      "content_base64": "UEsDBBQABgAIAAAAIQD...",
-      "size": 15360,
-      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    }
-  ],
-  "download_urls": [
-    {
-      "filename": "transcript_20251102_143500.docx",
-      "url": "/api/voice/download_file/transcript_20251102_143500.docx",
-      "size": 15360
-    }
-  ]
-}
-```
-
-**cURL示例**：
-
-```bash
-# 示例1：上传单个文件，返回JSON
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "generate_summary=true" \
-  -F "return_type=json"
-
-# 示例2：上传多个文件，直接下载ZIP
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@file1.mp3" \
-  -F "audio_files=@file2.mp3" \
-  -F "return_type=file" \
-  -o transcripts.zip
-
-# 示例3：使用热词
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "hotword=人工智能 深度学习 神经网络" \
-  -F "return_type=both"
-```
-
-**Python示例**：
-
-```python
-import requests
-
-# 基础用法
-url = "http://localhost:8998/api/voice/transcribe_all"
-files = {'audio_files': open('meeting.mp3', 'rb')}
-data = {
-    'language': 'zh',
-    'generate_summary': True,
-    'return_type': 'json'
-}
-
-response = requests.post(url, files=files, data=data)
-result = response.json()
-
-if result['success']:
-    print(f"转写完成: {result['message']}")
-    for item in result['results']:
-        print(f"文件: {item['filename']}")
-        print(f"说话人数: {item['statistics']['speakers_count']}")
-        print(f"转写段数: {item['statistics']['segments_count']}")
-
-# 批量上传
-files = [
-    ('audio_files', open('file1.mp3', 'rb')),
-    ('audio_files', open('file2.mp3', 'rb')),
-    ('audio_files', open('file3.mp3', 'rb'))
-]
-data = {'return_type': 'file'}
-
-response = requests.post(url, files=files, data=data)
-with open('transcripts.zip', 'wb') as f:
-    f.write(response.content)
-```
-
----
+### RESTful文件资源接口
 
 ### RESTful文件资源接口
 
@@ -730,17 +446,11 @@ curl -X PATCH "http://localhost:8998/api/voice/files/a1b2c3d4-e5f6-7890-abcd-ef1
 
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
-| `file_id` | string | 是 | 文件唯一标识，支持特殊值：`_clear_dify`（清空Dify生成文件）、`_clear_all`（清空所有历史记录） |
+| `file_id` | string | 是 | 文件唯一标识，支持特殊值：`_clear_all`（清空所有历史记录） |
 
 **特殊操作**：
 
-1. **清空Dify生成文件** (`file_id = "_clear_dify"`)：
-   - 删除所有 `transcripts_*.zip` 文件（Dify一站式转写生成的压缩包）
-   - 删除这些ZIP文件中包含的转写文档对应的音频文件
-   - 删除对应的转写文档和会议纪要
-   - 从历史记录中移除相关记录
-
-2. **清空所有历史记录** (`file_id = "_clear_all"`)：
+1. **清空所有历史记录** (`file_id = "_clear_all"`)：
    - 删除所有音频文件
    - 删除所有转写文档和会议纪要
    - 清空输出目录（保留 `history_records.json` 文件结构）
@@ -752,21 +462,6 @@ curl -X PATCH "http://localhost:8998/api/voice/files/a1b2c3d4-e5f6-7890-abcd-ef1
 {
   "success": true,
   "message": "文件删除成功"
-}
-```
-
-**响应示例（清空Dify生成文件）**：
-
-```json
-{
-  "success": true,
-  "message": "清空dify生成文件成功",
-  "deleted": {
-    "zip_files": 3,
-    "audio_files": 3,
-    "transcript_files": 3,
-    "records": 3
-  }
 }
 ```
 
@@ -790,9 +485,6 @@ curl -X PATCH "http://localhost:8998/api/voice/files/a1b2c3d4-e5f6-7890-abcd-ef1
 # 删除单个文件
 curl -X DELETE "http://localhost:8998/api/voice/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
-# 清空Dify生成文件
-curl -X DELETE "http://localhost:8998/api/voice/files/_clear_dify"
-
 # 清空所有历史记录
 curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
 ```
@@ -810,9 +502,7 @@ curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
 
 #### POST `/api/voice/upload`
 
-**功能**：上传音频文件（不执行转写）。
-
-**推荐替代**：使用 `POST /api/voice/transcribe_all`
+**功能**：上传音频文件（支持单个或多个文件，不执行转写）。
 
 **请求方式**：`POST` (multipart/form-data)
 
@@ -820,14 +510,31 @@ curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
 
 | 参数名 | 类型 | 必填 | 说明 |
 |-------|------|-----|------|
-| `audio_file` | File | 是 | 音频文件 |
+| `audio_file` | File | 是 | 音频文件（单个或多个同名字段） |
 
-**响应示例**：
+**使用方式**：
+- **单个文件**：form-data 中一个 `audio_file` 字段
+- **多个文件**：form-data 中多个 `audio_file` 字段（或使用 `audio_file[]`）
+
+**响应示例（单个文件）**：
 
 ```json
 {
   "success": true,
   "message": "文件上传成功",
+  "files": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "filename": "meeting_20251102_143000.mp3",
+      "original_name": "meeting.mp3",
+      "filepath": "/home/user/phosys/uploads/meeting_20251102_143000.mp3",
+      "size": 5242880,
+      "upload_time": "2025-11-02 14:30:00",
+      "status": "uploaded",
+      "progress": 0
+    }
+  ],
+  "file_ids": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"],
   "file": {
     "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "filename": "meeting_20251102_143000.mp3",
@@ -837,17 +544,72 @@ curl -X DELETE "http://localhost:8998/api/voice/files/_clear_all"
     "upload_time": "2025-11-02 14:30:00",
     "status": "uploaded",
     "progress": 0
-  }
+  },
+  "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 }
+```
+
+**注意**：单个文件时，返回格式同时包含：
+- `files` 数组（长度为1）：统一格式，方便模板转换节点使用
+- `file_ids` 数组（长度为1）：方便批量转写
+- `file` 对象：向后兼容字段
+- `file_id` 字符串：向后兼容字段
+
+**响应示例（多个文件）**：
+
+```json
+{
+  "success": true,
+  "message": "成功上传 3 个文件",
+  "files": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "filename": "meeting1_20251102_143000.mp3",
+      "original_name": "meeting1.mp3",
+      "filepath": "/home/user/phosys/uploads/meeting1_20251102_143000.mp3",
+      "size": 5242880,
+      "upload_time": "2025-11-02 14:30:00",
+      "status": "uploaded",
+      "progress": 0
+    },
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "filename": "meeting2_20251102_143001.mp3",
+      "original_name": "meeting2.mp3",
+      "filepath": "/home/user/phosys/uploads/meeting2_20251102_143001.mp3",
+      "size": 3145728,
+      "upload_time": "2025-11-02 14:30:01",
+      "status": "uploaded",
+      "progress": 0
+    }
+  ],
+  "file_ids": [
+    "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+  ],
+  "failed_files": null
+}
+```
+
+**cURL示例**：
+
+```bash
+# 单个文件上传
+curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting.mp3"
+
+# 多个文件上传（使用多个同名字段）
+curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting1.mp3" \
+  -F "audio_file=@meeting2.mp3" \
+  -F "audio_file=@meeting3.mp3"
 ```
 
 ---
 
 #### POST `/api/voice/transcribe`
 
-**功能**：开始转写（支持单文件或批量）。
-
-**推荐替代**：使用 `POST /api/voice/transcribe_all`
+**功能**：开始转写（支持单文件或批量，支持等待完成）。
 
 **请求方式**：`POST`
 
@@ -1381,7 +1143,7 @@ asyncio.run(connect_websocket())
 ```json
 {
   "status": "ok",
-  "version": "3.1.2-FunASR"
+  "version": "3.1.3-FunASR"
 }
 ```
 
@@ -1399,7 +1161,7 @@ asyncio.run(connect_websocket())
 {
   "success": true,
   "system": "running",
-  "version": "3.1.2-FunASR",
+  "version": "3.1.3-FunASR",
   "models_loaded": true
 }
 ```
@@ -1497,26 +1259,41 @@ interface Statistics {
 
 ```bash
 # cURL
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "return_type=json"
+# 1. 上传文件
+FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting.mp3" | jq -r '.file.id')
+
+# 2. 开始转写（wait=true 等待完成）
+curl -X POST "http://localhost:8998/api/voice/transcribe" \
+  -H "Content-Type: application/json" \
+  -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"wait\": true}"
 ```
 
 ```python
 # Python
 import requests
 
-url = "http://localhost:8998/api/voice/transcribe_all"
-files = {'audio_files': open('meeting.mp3', 'rb')}
-data = {'language': 'zh', 'return_type': 'json'}
+base_url = "http://localhost:8998/api/voice"
 
-response = requests.post(url, files=files, data=data)
+# 1. 上传文件
+with open('meeting.mp3', 'rb') as f:
+    files = {'audio_file': f}
+    response = requests.post(f'{base_url}/upload', files=files)
+    upload_result = response.json()
+    file_id = upload_result['file']['id']
+
+# 2. 开始转写（wait=true 等待完成）
+transcribe_data = {
+    'file_id': file_id,
+    'language': 'zh',
+    'wait': True
+}
+response = requests.post(f'{base_url}/transcribe', json=transcribe_data)
 result = response.json()
 
-if result['success']:
-    print(f"转写完成: {result['results'][0]['filename']}")
-    print(f"说话人数: {result['results'][0]['statistics']['speakers_count']}")
+if result.get('success') and result.get('status') == 'completed':
+    print(f"转写完成: {result['filename']}")
+    print(f"转写段数: {len(result['transcript'])}")
 ```
 
 ---
@@ -1524,30 +1301,42 @@ if result['success']:
 ### 场景2：批量转写多个文件
 
 ```bash
-# cURL - 直接下载ZIP
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@file1.mp3" \
-  -F "audio_files=@file2.mp3" \
-  -F "audio_files=@file3.mp3" \
-  -F "return_type=file" \
-  -o transcripts.zip
+# cURL
+# 上传多个文件
+for file in file1.mp3 file2.mp3 file3.mp3; do
+  FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+    -F "audio_file=@$file" | jq -r '.file.id')
+  
+  # 开始转写
+  curl -X POST "http://localhost:8998/api/voice/transcribe" \
+    -H "Content-Type: application/json" \
+    -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"wait\": true}"
+done
 ```
 
 ```python
 # Python
 import requests
 
-url = "http://localhost:8998/api/voice/transcribe_all"
-files = [
-    ('audio_files', open('file1.mp3', 'rb')),
-    ('audio_files', open('file2.mp3', 'rb')),
-    ('audio_files', open('file3.mp3', 'rb'))
-]
-data = {'return_type': 'file'}
+base_url = "http://localhost:8998/api/voice"
+files_to_transcribe = ['file1.mp3', 'file2.mp3', 'file3.mp3']
 
-response = requests.post(url, files=files, data=data)
-with open('transcripts.zip', 'wb') as f:
-    f.write(response.content)
+for file_path in files_to_transcribe:
+    # 上传文件
+    with open(file_path, 'rb') as f:
+        files = {'audio_file': f}
+        response = requests.post(f'{base_url}/upload', files=files)
+        file_id = response.json()['file']['id']
+    
+    # 开始转写
+    transcribe_data = {
+        'file_id': file_id,
+        'language': 'zh',
+        'wait': True
+    }
+    response = requests.post(f'{base_url}/transcribe', json=transcribe_data)
+    result = response.json()
+    print(f"{file_path}: {result.get('message')}")
 ```
 
 ---
@@ -1556,27 +1345,44 @@ with open('transcripts.zip', 'wb') as f:
 
 ```bash
 # cURL
-curl -X POST "http://localhost:8998/api/voice/transcribe_all" \
-  -F "audio_files=@meeting.mp3" \
-  -F "language=zh" \
-  -F "generate_summary=true" \
-  -F "hotword=季度报告 销售业绩 市场策略" \
-  -F "return_type=both"
+# 1. 上传文件
+FILE_ID=$(curl -X POST "http://localhost:8998/api/voice/upload" \
+  -F "audio_file=@meeting.mp3" | jq -r '.file.id')
+
+# 2. 开始转写
+curl -X POST "http://localhost:8998/api/voice/transcribe" \
+  -H "Content-Type: application/json" \
+  -d "{\"file_id\": \"$FILE_ID\", \"language\": \"zh\", \"hotword\": \"季度报告 销售业绩 市场策略\", \"wait\": true}"
+
+# 3. 生成会议纪要
+curl -X POST "http://localhost:8998/api/voice/generate_summary/$FILE_ID"
 ```
 
 ```python
 # Python
 import requests
-import base64
 
-url = "http://localhost:8998/api/voice/transcribe_all"
-files = {'audio_files': open('meeting.mp3', 'rb')}
-data = {
+base_url = "http://localhost:8998/api/voice"
+
+# 1. 上传文件
+with open('meeting.mp3', 'rb') as f:
+    files = {'audio_file': f}
+    response = requests.post(f'{base_url}/upload', files=files)
+    file_id = response.json()['file']['id']
+
+# 2. 开始转写（带热词）
+transcribe_data = {
+    'file_id': file_id,
     'language': 'zh',
-    'generate_summary': True,
     'hotword': '季度报告 销售业绩 市场策略',
-    'return_type': 'both'
+    'wait': True
 }
+response = requests.post(f'{base_url}/transcribe', json=transcribe_data)
+result = response.json()
+
+# 3. 生成会议纪要
+response = requests.post(f'{base_url}/generate_summary/{file_id}')
+summary_result = response.json()
 
 response = requests.post(url, files=files, data=data)
 result = response.json()
@@ -1742,7 +1548,7 @@ if result['success']:
 
 ### 1. 选择合适的接口
 
-- **快速使用**：使用一站式接口 `POST /api/voice/transcribe_all`
+- **快速使用**：使用 `POST /api/voice/transcribe` 接口，设置 `wait=true` 等待完成
 - **精细控制**：使用分步接口（上传→转写→查询）
 - **文件管理**：使用RESTful接口（GET/PATCH/DELETE `/api/voice/files/*`）
 
@@ -1879,6 +1685,23 @@ function connectWebSocket() {
 
 ## 更新日志
 
+### v3.1.3-FunASR (2025-12-04)
+
+**API简化与优化**
+
+#### 接口变更
+- ✅ **删除一站式转写接口**：移除 `POST /api/voice/transcribe_all` 接口，统一使用普通转写接口
+- ✅ **删除清空Dify生成文件功能**：移除 `DELETE /api/voice/files/_clear_dify` 特殊操作
+- ✅ **增强普通转写接口**：优化 `POST /api/voice/transcribe` 接口
+  - 当 `wait=true` 时，返回结果包含 `status` 字段和 `transcript` 字段
+  - `transcript` 中不包含 `words` 字段，只保留基本转写信息（speaker, text, start_time, end_time）
+  - 单个文件时，顶层直接返回 `transcript`，方便 Dify 等工具使用
+
+#### 技术改进
+- ✅ 简化了API接口结构，统一使用RESTful风格
+- ✅ 优化了转写接口的返回结构，更适合工作流工具集成
+- ✅ 清理了代码中的冗余功能，提高代码可维护性
+
 ### v3.1.2-FunASR (2025-11-25)
 
 **功能增强**
@@ -1918,7 +1741,6 @@ function connectWebSocket() {
 
 #### 新增功能
 - ✅ **真正的停止转写功能**：支持中断正在进行的转写任务，通过 `_cancelled` 标志和 `InterruptedError` 机制实现
-- ✅ **清空Dify生成文件**：新增 `DELETE /api/voice/files/_clear_dify` 接口，可精确删除Dify一站式转写生成的.zip文件及其对应的音频文件
 - ✅ **清空所有历史记录**：新增 `DELETE /api/voice/files/_clear_all` 接口，可一键清空所有转写历史记录
 
 #### 功能修复
@@ -1940,7 +1762,6 @@ function connectWebSocket() {
 
 ### v3.0.0 (2025-11-02)
 
-- ✅ 新增一站式转写接口
 - ✅ 新增RESTful风格文件资源接口
 - ✅ 支持批量文件处理
 - ✅ 支持三种返回模式（json/file/both）

@@ -1892,7 +1892,6 @@ body {
     border: 1px solid #e2e8f0;
 }
 
-.btn-clear-dify,
 .btn-clear-all {
     flex: 1;
     padding: 10px 20px;
@@ -1906,19 +1905,6 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-}
-
-.btn-clear-dify {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    color: white;
-}
-
-.btn-clear-dify:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
-}
-
-.btn-clear-all {
     background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
     color: white;
 }
@@ -1928,12 +1914,10 @@ body {
     box-shadow: 0 4px 12px rgba(250, 112, 154, 0.4);
 }
 
-.btn-clear-dify:active,
 .btn-clear-all:active {
     transform: translateY(0);
 }
 
-.btn-clear-dify i,
 .btn-clear-all i {
     font-size: 1rem;
 }
